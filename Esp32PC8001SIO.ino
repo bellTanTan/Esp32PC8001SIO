@@ -227,7 +227,7 @@ void bme280Main( void )
   bmeTemp->getEvent( &tempEvent );
   bmePressure->getEvent( &pressureEvent );
   bmeHumidity->getEvent( &humidityEvent );
-  int pos = localTime->tm_sec;
+  int pos = ( localTime->tm_sec % ARRAY_SIZE( bme280SampleData ) );
   bme280SampleData[pos].temp  = tempEvent.temperature;
   bme280SampleData[pos].hum   = humidityEvent.relative_humidity;
   bme280SampleData[pos].press = pressureEvent.pressure;
