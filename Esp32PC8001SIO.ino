@@ -32,6 +32,7 @@ ESP32 FTPClient v0.1.4 patch
  */
 
 #include <Arduino.h>
+#include <sys/time.h>
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
@@ -114,13 +115,12 @@ char        sioRecvRingBuf[128+16];
 
 void initApp( void )
 {
-  pinMode( SIO_RTS, OUTPUT );
-  pinMode( SIO_CTS, INPUT );
-  digitalWrite( SIO_RTS, LOW );
-
   Serial.begin( 115200 );
   while (!Serial && !Serial.available());
   Serial2.begin( 4800, SERIAL_8N1, SIO_RXD, SIO_TXD );
+  uint8_t threshold = ( SOC_UART_FIFO_LEN / 3 ) * 2;
+  Serial2.setHwFlowCtrlMode( HW_FLOWCTRL_CTS_RTS, threshold );
+  Serial2.setPins( SIO_RXD, SIO_TXD, SIO_CTS, SIO_RTS );
   while ( !Serial2 && !Serial2.available() );
   Serial.printf( "\r\nboot\r\nSDK %s\r\n", ESP.getSdkVersion() );
 
@@ -182,23 +182,23 @@ void initApp( void )
                  tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
                  tm.tm_hour, tm.tm_min, tm.tm_sec );
 
-  selectFileListNo   = 0;
-  fileListCount      = 0;
-  pFileList          = NULL;
-  ftpFileBufSize     = 0;
-  ftpFileBuf         = NULL;
-  binBufSize         = 0;
-  binBufOffset       = 0;
-  binBuf             = NULL;
-  bmeGetOldSec       = -1;
-  xmodemSeqNo        = 0;
-  xmodemBlockNo      = 0;
-  telnetSeqNo        = 0;
-  sioSendCmd         = cmdNon;
-  sioRecvCmd         = cmdNon;
-  sioSendBufPos      = 0;
-  sioSendBufByte     = 0;
-  sioRecvBufByte     = 0;
+  selectFileListNo = 0;
+  fileListCount    = 0;
+  pFileList        = NULL;
+  ftpFileBufSize   = 0;
+  ftpFileBuf       = NULL;
+  binBufSize       = 0;
+  binBufOffset     = 0;
+  binBuf           = NULL;
+  bmeGetOldSec     = -1;
+  xmodemSeqNo      = 0;
+  xmodemBlockNo    = 0;
+  telnetSeqNo      = 0;
+  sioSendCmd       = cmdNon;
+  sioRecvCmd       = cmdNon;
+  sioSendBufPos    = 0;
+  sioSendBufByte   = 0;
+  sioRecvBufByte   = 0;
   sioRecvRingBufReadPos  = 0;
   sioRecvRingBufWritePos = 0;
   memset( sioSendBuf,     0, sizeof( sioSendBuf ) );
@@ -286,18 +286,14 @@ void sioXmodemSendMain( void )
       break;
     case 20:
       if ( ( timeNow - xmodemTimer ) >= 60 )
-      {
         xmodemSeqNo = 0;
-      }
       else
       {
         if ( sioRecvCmd == cmdAck )
         {
           sioRecvCmd = cmdNon;
           if ( xmodemSendBytes == 0 )
-          {
             xmodemSeqNo = 0;
-          }
           else
           {
             xmodemSendBytes -= sioSendBufByte;
@@ -398,7 +394,7 @@ void sioSendMain( void )
 
 void addFileList( const char * pFtpFileList )
 {
-  if ( pFileList == NULL )
+  if ( !pFileList )
   {
     size_t memsize = sizeof( *pFileList );
     pFileList = (PFILELIST)malloc( memsize );
@@ -408,7 +404,7 @@ void addFileList( const char * pFtpFileList )
     size_t memsize = sizeof( *pFileList ) * ( fileListCount + 1 );
     pFileList = (PFILELIST)realloc( (void *)pFileList, memsize );
   }
-  if ( pFileList == NULL )
+  if ( !pFileList )
     return;
   //           1         2         3         4         5         9
   // 01234567890123456789012345678901234567890123456789012345678901234567890
@@ -419,7 +415,7 @@ void addFileList( const char * pFtpFileList )
   char * p = strtok( (char *)pFtpFileList, szDelimiter );
   size_t n = 0;
   int item = 0;
-  while( p != NULL )
+  while( p )
   {
     switch ( item )
     {
@@ -494,17 +490,27 @@ void sioCmdVer( void )
 
 void sioCmdSntp( void )
 {
-  sioSendCmd = sioRecvCmd;
-  sioRecvCmd = cmdNon;
-  memset( sioSendBuf, 0, sizeof( sioSendBuf ) );
-  sprintf( sioSendBuf, "SNTP:%d,%02d,%02d,%02d,%02d,%02d%c%c",
-           localTime->tm_year + 1900,
-           localTime->tm_mon + 1,
-           localTime->tm_mday,
-           localTime->tm_hour,
-           localTime->tm_min,
-           localTime->tm_sec,
-           CR, LF );
+  struct timeval t0;
+  const int baseTimingMsec = 800;
+
+  gettimeofday( &t0, NULL );
+  if ( t0.tv_usec >= ( baseTimingMsec * 1000 )
+    && t0.tv_usec <  ( ( baseTimingMsec + 10 ) * 1000 ) )
+  {
+    t0.tv_sec += 1;
+    localTime = localtime( &t0.tv_sec );
+    sioSendCmd = sioRecvCmd;
+    sioRecvCmd = cmdNon;
+    memset( sioSendBuf, 0, sizeof( sioSendBuf ) );
+    sprintf( sioSendBuf, "SNTP:%d,%02d,%02d,%02d,%02d,%02d%c%c",
+             localTime->tm_year + 1900,
+             localTime->tm_mon + 1,
+             localTime->tm_mday,
+             localTime->tm_hour,
+             localTime->tm_min,
+             localTime->tm_sec,
+             CR, LF );
+  }
 }
 
 void sioCmdBme( void )
@@ -604,7 +610,7 @@ uint16_t cmt2bin( int * pDataType )
       int p = ftpFileBufSize - 9;
       fEnd = ( memcmp( &ftpFileBuf[p], buf, 9 ) == 0 ? true : false );
     }
-    if ( fHead == true && fEnd == true )
+    if ( fHead && fEnd )
     {
       binBufSize = ftpFileBufSize - ( 10 + 6 + 8 );
       memcpy( binBuf, &ftpFileBuf[16], binBufSize );
@@ -626,9 +632,9 @@ uint16_t cmt2bin( int * pDataType )
       ftpFileBufOffset += 4;
       while ( true )
       {
-        if ( ftpFileBuf[ftpFileBufOffset+0] == 0x3A &&
-             ftpFileBuf[ftpFileBufOffset+1] == 0x00 &&
-             ftpFileBuf[ftpFileBufOffset+2] == 0x00 )
+        if ( ftpFileBuf[ftpFileBufOffset+0] == 0x3A
+          && ftpFileBuf[ftpFileBufOffset+1] == 0x00
+          && ftpFileBuf[ftpFileBufOffset+2] == 0x00 )
         {
           ftpFileBufOffset += 3;
           *pDataType = 3;
@@ -656,6 +662,12 @@ uint16_t cmt2bin( int * pDataType )
 
 void sioCmdFtpGet( void )
 {
+  SIOCMD saveSioRecvCmd = sioRecvCmd;
+  if ( !pFileList )
+  {
+    sioCmdFtpList();
+    sioRecvCmd = saveSioRecvCmd;
+  }
   sioSendCmd = sioRecvCmd;
   sioRecvCmd = cmdNon;
   memset( sioSendBuf, 0, sizeof( sioSendBuf ) );
@@ -670,14 +682,10 @@ void sioCmdFtpGet( void )
     size_t fileSize = atol( pFileList[selectFileListNo].szSize );
     if ( fileSize > 0 )
     {
-      if ( ftpFileBuf == NULL )
-      {
+      if ( !ftpFileBuf )
         ftpFileBuf = (uint8_t *)malloc( fileSize );
-      }
       else
-      {
         ftpFileBuf = (uint8_t *)realloc( ftpFileBuf, fileSize );
-      }
       if ( ftpFileBuf )
       {
         char * fileName = pFileList[selectFileListNo].szName;
@@ -693,14 +701,10 @@ void sioCmdFtpGet( void )
           ftp.CloseConnection();
           ftpFileBufSize = fileSize;
           binBufSize     = fileSize;
-          if ( binBuf == NULL )
-          {
+          if ( !binBuf )
             binBuf = (uint8_t *)malloc( binBufSize );
-          }
           else
-          {
             binBuf = (uint8_t *)realloc( binBuf, binBufSize );
-          }
           char * p = strrchr( fileName, '.' );
           if ( binBuf && p )
           {
@@ -857,7 +861,7 @@ bool telnetNegotiation( void )
         }
         break;
     }
-    if ( sendDataByte != 0 )
+    if ( sendDataByte > 0 )
     {
       telnetClient.write( sendData, sendDataByte );
       if ( sendData[0] == 0xFF

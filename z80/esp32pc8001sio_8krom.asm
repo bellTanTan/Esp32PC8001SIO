@@ -11,11 +11,20 @@ _MON_ENTRY:
                 DB      VER_MAJOR
                 DB      VER_MINOR
                 DB      VER_REVISION
+_MON_U_ENTRY:
+                CALL    _ENTRY
+                JP      ROM_MON_UNEXT
 _ENTRY:
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
                 LD      HL,NEWJPTBL
                 LD      DE,CMD_ENTRY
                 LD      BC,3
                 LDIR
+                POP     HL
+                POP     DE
+                POP     BC
                 RET
 NEWJPTBL:
                 JP      NEW_CMD
@@ -25,6 +34,9 @@ NEW_CMD:
 ;
 ;
 _USER_ROM_END:
-                DS      8192 - ( _USER_ROM_END - _USER_ROM_START ), 0FFH
+                DS      8192 - 4 - ( _USER_ROM_END - _USER_ROM_START ), 0FFH
+;
+                JP      _MON_U_ENTRY
+                DB      "U"
                 END
 

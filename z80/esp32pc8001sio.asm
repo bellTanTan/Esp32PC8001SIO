@@ -1,3 +1,15 @@
+;********************************************************************************
+;
+; Created by tan (trinity09181718@gmail.com)
+; Copyright (c) 2022 tan
+; All rights reserved.
+;
+; Please contact trinity09181718@gmail.com if you need a commercial license.
+; This software is available under GPL v3.
+;
+;********************************************************************************
+;
+; Implementation contents as N-BASIC command extension
 ;
 ; CMD BME
 ; CMD FTPLIST
@@ -5,7 +17,6 @@
 ; CMD FTPGET,nnn,&HXXXX
 ; CMD SNTP
 ; CMD VER
-;
 ;
 ; CONSTANT CONTROL CODE
 ;
@@ -104,7 +115,7 @@ ROM_CMPHLDE:    EQU     5ED3H
 ROM_DSP1CHR:    EQU     5FB0H
 ROM_DSPCRLF:    EQU     5FCAH
 ;
-; CONSTANT ROM BASIC WORD AREA
+; CONSTANT ROM BASIC WORK AREA
 ;
 PC8001RAM_TOP:  EQU     8000H
 ROMBAS_WORKTOP: EQU     0EA00H
@@ -132,7 +143,7 @@ SAVESP:         EQU     0F216H
 LISTCNT:        EQU     0F218H
 SELLISTNO:      EQU     0F21AH
 LOADADRS:       EQU     0F21CH
-EXECADRS:       EQU     0F21EH
+EXECADRS:       EQU     0F22EH
 MODEWORD:       EQU     0F220H
 CTLWORD:        EQU     0F221H
 CMDNO:          EQU     0F222H
@@ -151,15 +162,16 @@ FLGDATA:        EQU     0F2FFH          ; 76543210
                                         ; |||||||+--- <CR><LF> first send
                                         ; ||||||+---- load basic cmt type       
                                         ; |||||+----- sio recv time out (5sec)
-                                        ; ||||+------ reserve
-                                        ; |||+------- reserve
+                                        ; ||||+------ sio recv cancel (keyboard STOP key)
+                                        ; |||+------- enable keyboard STOP key check
                                         ; ||+-------- reserve
                                         ; |+--------- reserve
                                         ; +---------- reserve
 FLG_FIRSTSEND:  EQU     00000001B
 FLG_LOADBAS:    EQU     00000010B
 FLG_RCVTIMEOUT: EQU     00000100B
-
+FLG_RCVCANCEL:  EQU     00001000B
+FLG_ENABLESTOP: EQU     00010000B
 ;
 ; CONSTANT ESP32PC8001SIO VERSION DATA
 ;
@@ -169,21 +181,25 @@ VER_REVISION:   EQU     0
 ;
                 ;ORG    0H
 CMD_START:
+                DI
                 LD      (SAVESP),SP
                 EX      DE,HL
                 LD      HL,0FFFFH
                 LD      SP,HL
                 EX      DE,HL
+                EI
                 CALL    PARSER_CMDPARAM
                 JP      C,CMD_SYNERR_EXIT
                 JP      (IY)
 CMD_EXIT:
                 XOR     A
 CMD_EXIT000:
+                DI
                 EX      DE,HL
                 LD      HL,(SAVESP)
                 LD      SP,HL
                 EX      DE,HL
+                EI
                 CP      0
                 JR      NZ,CMD_EXIT010
                 RET
@@ -559,6 +575,9 @@ CMD_FTPGET_130:
                 DJNZ    CMD_FTPGET_130
                 LD      (LOADADRS),DE
 CMD_FTPGET_200:
+                LD      A,(FLGDATA)
+                OR      FLG_ENABLESTOP
+                LD      (FLGDATA),A
                 LD      A,1
                 LD      (CHKBLKNO),A
 CMD_FTPGET_L010:
@@ -567,15 +586,15 @@ CMD_FTPGET_L010:
 CMD_FTPGET_L020:
                 CALL    IN_SIO
                 CP      EOT
-                JR      Z,CMD_FTPGET_030
+                JP      Z,CMD_FTPGET_030
                 CP      SOH
                 JR      Z,CMD_FTPGET_010
                 LD      A,(FLGDATA)
                 AND     FLG_RCVTIMEOUT
                 JR      NZ,CMD_FTPGET_L010
-                IN      A,(KEYBRD9)
-                AND     00000001B
-                JP      Z,CMD_FTPGET_CANCEL
+                LD      A,(FLGDATA)
+                AND     FLG_RCVCANCEL
+                JP      NZ,CMD_FTPGET_CANCEL
                 JR      CMD_FTPGET_L020
 CMD_FTPGET_L030:
                 CALL    IN_SIO
@@ -585,10 +604,10 @@ CMD_FTPGET_L030:
                 JR      Z,CMD_FTPGET_010
                 LD      A,(FLGDATA)
                 AND     FLG_RCVTIMEOUT
-                JP      NZ,CMD_FTPGET_CANCEL2
-                IN      A,(KEYBRD9)
-                AND     00000001B
-                JP      Z,CMD_FTPGET_CANCEL
+                JP      NZ,CMD_FTPGET_CANCEL
+                LD      A,(FLGDATA)
+                AND     FLG_RCVCANCEL
+                JP      NZ,CMD_FTPGET_CANCEL
                 JR      CMD_FTPGET_L030
 CMD_FTPGET_010:
                 CALL    CLR_RCVBUF
@@ -597,11 +616,14 @@ CMD_FTPGET_010:
                 LD      B,131
 CMD_FTPGET_L040:
                 CALL    IN_SIO
-                PUSH    AF
+                LD      C,A
                 LD      A,(FLGDATA)
                 AND     FLG_RCVTIMEOUT
-                JR      NZ,CMD_FTPGET_CANCEL3
-                POP     AF
+                JP      NZ,CMD_FTPGET_CANCEL
+                LD      A,(FLGDATA)
+                AND     FLG_RCVCANCEL
+                JP      NZ,CMD_FTPGET_CANCEL
+                LD      A,C
                 LD      (HL),A
                 INC     HL
                 DJNZ    CMD_FTPGET_L040
@@ -610,7 +632,7 @@ CMD_FTPGET_L040:
                 CALL    CHKDATA
                 JR      C,CMD_FTPGET_020
                 CALL    CHK_MEMOVER
-                JR      C,CMD_FTPGET_CANCEL2
+                JR      C,CMD_FTPGET_CANCEL
                 LD      HL,RCVBUF_DATA
                 LD      BC,128
                 LDIR
@@ -667,9 +689,7 @@ CMD_FTPGET_FIXBAS:
                 LD      (FREEAREA_TOP), HL
                 POP     HL
                 JP      CMD_EXIT
-CMD_FTPGET_CANCEL3:
-                POP     AF
-CMD_FTPGET_CANCEL2:
+CMD_FTPGET_CANCEL:
                 CALL    ROM_DSPCRLF
                 XOR     A
                 LD      (OUTPUT_DEVICE),A
@@ -678,7 +698,6 @@ CMD_FTPGET_CANCEL2:
                 LD      HL,ERR_MSG_000
                 CALL    ROM_MSGOUT
                 CALL    ROM_BEEP
-CMD_FTPGET_CANCEL:
                 LD      A,CAN
                 CALL    OUT_SIO
                 LD      A,1
@@ -1148,6 +1167,9 @@ INIT_SIO_020:
                 OR      FLG_FIRSTSEND
                 LD      (FLGDATA),A
 INIT_SIO_030:
+                LD      A,(FLGDATA)
+                AND     ~FLG_ENABLESTOP
+                LD      (FLGDATA),A
                 RET
 INIT_SIO_010:
                 LD      A,(CTLWORD)
@@ -1235,13 +1257,21 @@ DISABLE_RTS:
 IN_SIO:
                 LD      A,(FLGDATA)
                 AND     ~FLG_RCVTIMEOUT
+                AND     ~FLG_RCVCANCEL
                 LD      (FLGDATA),A
                 PUSH    BC
                 PUSH    DE
                 PUSH    HL
-                LD      HL,3            ; 5194msec Timer
-                LD      BC,8000H
+                LD      HL,3            ; 5000msec Timer
+                LD      BC,0A00H
 IN_SIO_010:
+                LD      A,(FLGDATA)
+                AND     FLG_ENABLESTOP
+                JR      Z,IN_SIO_015
+                IN      A,(KEYBRD9)
+                AND     00000001B
+                JR      Z,IN_SIO_070
+IN_SIO_015:
                 IN      A,(USARTCW)
                 LD      D,A
                 AND     00111000B
@@ -1270,6 +1300,12 @@ IN_SIO_060:
                 LD      (FLGDATA),A
                 XOR     A
                 JR      IN_SIO_040
+IN_SIO_070:
+                LD      A,(FLGDATA)
+                OR      FLG_RCVCANCEL
+                LD      (FLGDATA),A
+                XOR     A
+                JR      IN_SIO_040
 IN_SIO_030:
                 IN      A,(USARTDW)
 IN_SIO_040:
@@ -1282,15 +1318,6 @@ IN_SIO_050:
                 OR      00010000B
                 OUT     (USARTCW),A
                 JR      IN_SIO_020
-;
-;
-;
-IN_SIO3:
-                IN      A,(USARTCW)
-                AND     00000010B
-                JP      Z,SETCFRET
-                IN      A,(USARTDW)
-                JP      CLRCFRET
 ;
 ;
 ;
@@ -1403,7 +1430,7 @@ MUL_000:
 ;
 ;
 ;
-ERR_MSG_000:    DB      "abort Receive", 0
+ERR_MSG_000:    DB      "abort receive", 0
 ERR_MSG_001:    DB      "receive time out", 0
 ERR_MSG_002:    DB      "received command mismatch", 0
 ERR_MSG_003:    DB      "ftpget failed", 0
