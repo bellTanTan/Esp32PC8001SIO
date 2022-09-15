@@ -132,7 +132,7 @@ FC-80ピン全体長 10.7mm
 |----|----|----|----|----|
 |CPU1|ESP32-WROOM-32|https://akizukidenshi.com/catalog/g/gM-11647/|1|新規に購入する場合は各種不具合改修されたD版以降が良いと思います|
 |IC1|SN74LS04||1|PC-8031-2W基板から取り外して利用しました。中古購入だとヤフオク/各種電子部品取り扱いショップで探して下さい|
-|IC2|2764 UVEPROM|手持ち品(NEC/uPD2764D)を使用しました。中古購入だとヤフオク/各種電子部品取り扱いショップで探して下さい|
+|IC2|2764 UVEPROM||手持ち品(NEC/uPD2764D)を使用しました。中古購入だとヤフオク/各種電子部品取り扱いショップで探して下さい|
 |U1|AMS1117-3.3V 降圧型モジュール|https://www.amazon.co.jp/KKHMF-AMS1117-3-3-%E3%83%91%E3%83%AF%E3%83%BC%E3%83%A2%E3%82%B8%E3%83%A5%E3%83%BC%E3%83%AB-AMS1117-3-3V-%E9%99%8D%E5%9C%A7%E5%9E%8B%E3%83%A2%E3%82%B8%E3%83%A5%E3%83%BC%E3%83%AB/dp/B07FZ17B7D/ref=sr_1_6?__mk_ja_JP=%E3%82%AB%E3%82%BF%E3%82%AB%E3%83%8A&keywords=AMS1117&qid=1663228485&sr=8-6|1|10セット品より動作確認して良さそうなのを選別して利用します。L字ピンは取り外して3ピンヘッダを取り付けて利用します|
 |U2|BME280|https://www.amazon.co.jp/KKHMF-BME280%E6%B8%A9%E5%BA%A6%E3%82%BB%E3%83%B3%E3%82%B5-%E3%83%87%E3%82%B8%E3%82%BF%E3%83%AB%E3%83%96%E3%83%AC%E3%82%A4%E3%82%AF%E3%82%A2%E3%82%A6%E3%83%88IIC-5V%E6%B8%A9%E5%BA%A6%E3%82%BB%E3%83%B3%E3%82%B5-Arduino%E3%81%AB%E5%AF%BE%E5%BF%9C/dp/B088FLGGT8/ref=sr_1_7?__mk_ja_JP=%E3%82%AB%E3%82%BF%E3%82%AB%E3%83%8A&keywords=BME280&linkCode=qs&qid=1663227828&sourceid=Mozilla-search&sr=8-7|1|BMP280(温度/気圧)を引き当てたらハズレと思って下さい。本来ならセンサ配置面のシルク印刷BMEの下にマークが入るはずです。マーク記載無し品として安くしているのかも知れません。BME280(温度/湿度/気圧)品販売なのにBMP280(温度/気圧)品混入が記載したURL以外のメーカー品であったような気がします|
 |U3|AE-LCNV4-MOSFET|https://akizukidenshi.com/catalog/g/gK-13837/|1|ESP32側(3.3V)とPC-8001側(5V)とのTTLレベル変換に使用します|
