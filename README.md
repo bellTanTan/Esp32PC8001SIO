@@ -159,7 +159,7 @@ FC-80ピン全体長 10.7mm
 
 資料整備時点(2022/09/15)で[Arduino IDE](https://www.arduino.cc/en/software)は2.0.0がリリースされています。ここでは1.8.19で記載します。Arduino IDE環境定義、esp32環境定義は他サイトを参考にして下さい。[DEKO様サイト](https://ht-deko.com/arduino/esp-wroom-32.html)は情報の網羅レベルが半端ないです。一読されるのをお勧めします。
 
-必要になるライブフラリは以下2点です。
+必要になるライブラリは以下2点です。
 
     ESP32 FTPClient v0.1.4
     Adafruit BME280 v2.2.2
