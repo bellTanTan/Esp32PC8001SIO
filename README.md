@@ -256,7 +256,7 @@ dhcp化
 48行目は現時点(2022/09/15)では利用出来ません。定義としてはtelnetサーバーのIPアドレス値です。  
 49行目は現時点(2022/09/15)では利用出来ません。定義としてはtelnetサーバーのTCPポート番号値です。  
 
-ボード定義(Arduino IDE board/target/flash size/partition scheme/PSRAMの選択)が終わったら「検証」をクリックしてコンパイルがとおるか確認して下さい。現時点(2022/09/15)では利用出来ませんがcmd spiffslist/cmd spiffsgetの実装のためにpartition schemeはNo OTA (1MB APP/3MB SPIFFS)として下さい。[ESP32 Sketch Data Upload](https://github.com/lorol/arduino-esp32fs-plugin)を使用する事になりますので環境定義して頂いたら幸いです。
+ボード定義(Arduino IDE board/target/flash size/partition scheme/PSRAM/等の選択)が終わったら「検証」をクリックしてコンパイルがとおるか確認して下さい。現時点(2022/09/15)では利用出来ませんがcmd spiffslist/cmd spiffsgetの実装のためにpartition schemeはNo OTA (1MB APP/3MB SPIFFS)として下さい。[ESP32 Sketch Data Upload](https://github.com/lorol/arduino-esp32fs-plugin)を使用する事になりますので環境定義して頂いたら幸いです。
 
 SIOゲタ、電源ユニット、TTLレベル変換USBシリアル変換ユニットをブレッドボードに挿した状態を示します。TTLレベル変換USBシリアル変換ユニットはTTLレベル3.3Vで使用します。
 
