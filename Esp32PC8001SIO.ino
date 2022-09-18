@@ -3,7 +3,7 @@
   Copyright (c) 2022 tan
   All rights reserved.
 
-  Arduino IDE board : Arduino ESP32 v2.0.4
+  Arduino IDE board : Arduino ESP32 v2.0.5
   library           : ESP32 FTPClient v0.1.4
                     : Adafruit BME280 v2.2.2
   target            : ESP32 DEV Module
