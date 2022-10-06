@@ -1,4 +1,4 @@
-                ORG     0DF00H
+                ORG     0A000H
 _PROG_TOP:
 _MON_ENTRY:
                 CALL    _ENTRY
@@ -14,14 +14,12 @@ _MON_ENTRY:
                 DB      VER_MINOR
                 DB      VER_REVISION
 _ENTRY:
-                LD      HL,NEWJPTBL
-                LD      DE,CMD_ENTRY
-                LD      BC,3
-                LDIR
+                CALL    ENTRY_SETUP
                 RET
 NEWJPTBL:
                 JP      NEW_CMD
 NEW_CMD:
                 INCLUDE "esp32pc8001sio.asm"
+_PROG_END:
                 END
 

@@ -3,1510 +3,1952 @@
 6000			_USER_ROM_START: 
 6000			_PROG_TOP: 
 6000 ..			                DB      "AB" 
-6002 c3 16 60		                JP      _ENTRY 
-6005			_MON_ENTRY: 
-6005 cd 16 60		                CALL    _ENTRY 
-6008 c3 81 00		                JP      ROM_BASPROMPT 
-600b 00			                NOP 
+6002 00			                NOP 
+6003 c3 16 60		                JP      _ENTRY 
+6006			_MON_ENTRY: 
+6006 cd 16 60		                CALL    _ENTRY 
+6009 c3 81 00		                JP      ROM_BASPROMPT 
 600c 00			                NOP 
 600d 01			                DB      VER_MAJOR 
 600e 00			                DB      VER_MINOR 
-600f 00			                DB      VER_REVISION 
+600f 01			                DB      VER_REVISION 
 6010			_MON_U_ENTRY: 
 6010 cd 16 60		                CALL    _ENTRY 
 6013 c3 35 5c		                JP      ROM_MON_UNEXT 
 6016			_ENTRY: 
-6016 c5			                PUSH    BC 
-6017 d5			                PUSH    DE 
-6018 e5			                PUSH    HL 
-6019 21 28 60		                LD      HL,NEWJPTBL 
-601c 11 fc f0		                LD      DE,CMD_ENTRY 
-601f 01 03 00		                LD      BC,3 
-6022 ed b0		                LDIR 
-6024 e1			                POP     HL 
-6025 d1			                POP     DE 
-6026 c1			                POP     BC 
-6027 c9			                RET 
-6028			NEWJPTBL: 
-6028 c3 2b 60		                JP      NEW_CMD 
-602b			NEW_CMD: 
-602b			                INCLUDE "esp32pc8001sio.asm" 
-602b			;******************************************************************************** 
-602b			; 
-602b			; Created by tan (trinity09181718@gmail.com) 
-602b			; Copyright (c) 2022 tan 
-602b			; All rights reserved. 
-602b			; 
-602b			; Please contact trinity09181718@gmail.com if you need a commercial license. 
-602b			; This software is available under GPL v3. 
-602b			; 
-602b			;******************************************************************************** 
-602b			; 
-602b			; Implementation contents as N-BASIC command extension 
-602b			; 
-602b			; CMD BME 
-602b			; CMD FTPLIST 
-602b			; CMD FTPGET,nnn 
-602b			; CMD FTPGET,nnn,&HXXXX 
-602b			; CMD SNTP 
-602b			; CMD VER 
-602b			; 
-602b			; CONSTANT CONTROL CODE 
-602b			; 
-602b			NUL:            EQU     00H 
-602b			SOH:            EQU     01H 
-602b			STX:            EQU     02H 
-602b			EOT:            EQU     04H 
-602b			ACK:            EQU     06H 
-602b			BS:             EQU     08H 
-602b			LF:             EQU     0AH 
-602b			CR:             EQU     0DH 
-602b			NAK:            EQU     15H 
-602b			CAN:            EQU     18H 
-602b			ESC:            EQU     1BH 
-602b			; 
-602b			; CONSTANT I/O PORT 
-602b			; 
-602b			KEYBRD9:        EQU     09H 
-602b			USARTDW:        EQU     20H 
-602b			USARTCW:        EQU     21H             ; MODE SETUP 
-602b			                                        ; 76543210 
-602b			                                        ; ||||||++--- BAUD RATE FACTOR 
-602b			                                        ; ||||||      00 : SYNC MODE 
-602b			                                        ; ||||||      01 : 1X 
-602b			                                        ; ||||||      10 : 16X 
-602b			                                        ; ||||||      11 : 64X 
-602b			                                        ; ||||++----- CHARACTER LENGTH 
-602b			                                        ; ||||        00 : 5BITS 
-602b			                                        ; ||||        01 : 6BITS 
-602b			                                        ; ||||        10 : 7BITS 
-602b			                                        ; ||||        11 : 8BITS 
-602b			                                        ; |||+------- PARITY ENABLE 
-602b			                                        ; |||         1 : ENABLE 
-602b			                                        ; |||         0 : DISABLE 
-602b			                                        ; ||+-------- EVEN PARITY GENARATION/CHECK 
-602b			                                        ; ||          1 : EVEN 
-602b			                                        ; ||          0 : ODD 
-602b			                                        ; ++--------- NUMBER OF STOP BITS 
-602b			                                        ;             00 : INVALID 
-602b			                                        ;             01 : 1 BIT 
-602b			                                        ;             10 : 1.5 BITS 
-602b			                                        ;             11 : 2 BITS 
-602b			                                        ; 
-602b			                                        ; COMMAND SETUP 
-602b			                                        ; 76543210 
-602b			                                        ; |||||||+--- TRANSMIT ENABLE 
-602b			                                        ; |||||||     1 : ENABLE 
-602b			                                        ; |||||||     0 : DISABLE 
-602b			                                        ; ||||||+---- DATA TERMINAL READY 
-602b			                                        ; ||||||      "high" will force ~DTR output zero 
-602b			                                        ; |||||+----- RECEIVE ENABLE 
-602b			                                        ; |||||       1 : ENABLE 
-602b			                                        ; |||||       0 : DISABLE 
-602b			                                        ; ||||+------ SEND BREAK CHARACTER 
-602b			                                        ; ||||        1 : forces TxD "low" 
-602b			                                        ; ||||        0 : normal operation 
-602b			                                        ; |||+------- ERROR RESET 
-602b			                                        ; |||         1 : reset all error flags PE,OE,FE 
-602b			                                        ; ||+-------- REQUEST TO SEND 
-602b			                                        ; ||          "high" will force ~RTS output zero 
-602b			                                        ; |+--------- INTERNAL RESET 
-602b			                                        ; |           "high" returns USART to Mode Instruction Format 
-602b			                                        ; +---------- ENTER HUNT MODE 
-602b			                                        ;             1 = enable search for Sync Characters 
-602b			                                        ; 
-602b			                                        ; STATUS READ 
-602b			                                        ; 76543210 
-602b			                                        ; |||||||+--- TxRDY 
-602b			                                        ; ||||||+---- RxRDY 
-602b			                                        ; |||||+----- TxEMPTY 
-602b			                                        ; ||||+------ PE(PARITY ERROR) 
-602b			                                        ; |||+------- OE(OVERRUN ERROR) 
-602b			                                        ; ||+-------- FE(FRAMING ERROR) 
-602b			                                        ; |+--------- SYNDET 
-602b			                                        ; +---------- DSR 
-602b			CONTROL1:       EQU     30H 
-602b			; 
-602b			; CONSTANT ROM BASIC ROUTINE 
-602b			; 
-602b			ROM_BASPROMPT:  EQU     0081H 
-602b			ROM_DSPCHR:     EQU     0257H 
-602b			ROM_MOVECURSOR: EQU     03A9H 
-602b			ROM_DSPCURSOR:  EQU     0BE2H 
-602b			ROM_BEEP:       EQU     0D43H 
-602b			ROM_KEYWAIT:    EQU     0F75H 
-602b			ROM_KEYSCAN:    EQU     0FACH 
-602b			ROM_TIMEREAD:   EQU     1602H 
-602b			ROM_TIMEWRITE:  EQU     1663H 
-602b			ROM_BIN2DECASC: EQU     309FH 
-602b			ROM_SYNERR:     EQU     3BDFH 
-602b			ROM_MSGOUT:     EQU     52EDH 
-602b			ROM_MON_UNEXT:  EQU     5C35H 
-602b			ROM_HEXASC2BIN: EQU     5E4BH 
-602b			ROM_DSPHEX4:    EQU     5EC0H 
-602b			ROM_CMPHLDE:    EQU     5ED3H 
-602b			ROM_DSP1CHR:    EQU     5FB0H 
-602b			ROM_DSPCRLF:    EQU     5FCAH 
-602b			; 
-602b			; CONSTANT ROM BASIC WORK AREA 
-602b			; 
-602b			PC8001RAM_TOP:  EQU     8000H 
-602b			ROMBAS_WORKTOP: EQU     0EA00H 
-602b			FUNKEY_DISPSTS: EQU     0EA60H 
-602b			CRT_TEXT_ROWS:  EQU     0EA62H 
-602b			CURSOR_YPOS:    EQU     0EA63H 
-602b			CURSOR_XPOS:    EQU     0EA64H 
-602b			CRT_TEXT_COLS:  EQU     0EA65H 
-602b			CTL1_OUTDATA:   EQU     0EA66H 
-602b			BCD_TIME_SEC:   EQU     0EA76H 
-602b			BCD_TIME_YEAR:  EQU     0EA7BH      
-602b			OUTPUT_DEVICE:  EQU     0EB49H 
-602b			BASAREA_TOP:    EQU     0EB54H 
-602b			VARAREA_TOP:    EQU     0EFA0H 
-602b			ARRAYAREA_TOP:  EQU     0EFA2H 
-602b			FREEAREA_TOP:   EQU     0EFA4H 
-602b			BIN_ACC:        EQU     0F0A8H 
-602b			CMD_ENTRY:      EQU     0F0FCH 
-602b			; 
-602b			; N-BASIC ROM FREE AREA1 : F216~F2FF 
-602b			; N-BASIC ROM FREE AREA2 : FF3D~FFFF 
-602b			; CONSTANT ESP32PC8001SIO WORK AREA 
-602b			; 
-602b			SAVESP:         EQU     0F216H 
-602b			LISTCNT:        EQU     0F218H 
-602b			SELLISTNO:      EQU     0F21AH 
-602b			LOADADRS:       EQU     0F21CH 
-602b			EXECADRS:       EQU     0F22EH 
-602b			MODEWORD:       EQU     0F220H 
-602b			CTLWORD:        EQU     0F221H 
-602b			CMDNO:          EQU     0F222H 
-602b			CHKBLKNO:       EQU     0F223H 
-602b			LFRECVCOUNT:    EQU     0F224H 
-602b			DISPBUF_TOP:    EQU     0F230H 
-602b			SNDBUF_TOP:     EQU     0F270H 
-602b			RCVBUF_TOP:     EQU     0F270H 
-602b			RCVBUF_HEADER:  EQU     RCVBUF_TOP 
-602b			RCVBUF_BLKNO:   EQU     RCVBUF_TOP +1 
-602b			RCVBUF_CBLKNO:  EQU     RCVBUF_TOP +2 
-602b			RCVBUF_DATA:    EQU     RCVBUF_TOP +3 
-602b			RCVBUF_CHKSUM:  EQU     RCVBUF_DATA +128 
-602b			RCVBUF_BOTTOM:  EQU     RCVBUF_CHKSUM 
-602b			FLGDATA:        EQU     0F2FFH          ; 76543210 
-602b			                                        ; |||||||+--- <CR><LF> first send 
-602b			                                        ; ||||||+---- load basic cmt type        
-602b			                                        ; |||||+----- sio recv time out (5sec) 
-602b			                                        ; ||||+------ sio recv cancel (keyboard STOP key) 
-602b			                                        ; |||+------- enable keyboard STOP key check 
-602b			                                        ; ||+-------- reserve 
-602b			                                        ; |+--------- reserve 
-602b			                                        ; +---------- reserve 
-602b			FLG_FIRSTSEND:  EQU     00000001B 
-602b			FLG_LOADBAS:    EQU     00000010B 
-602b			FLG_RCVTIMEOUT: EQU     00000100B 
-602b			FLG_RCVCANCEL:  EQU     00001000B 
-602b			FLG_ENABLESTOP: EQU     00010000B 
-602b			; 
-602b			; CONSTANT ESP32PC8001SIO VERSION DATA 
-602b			; 
-602b			VER_MAJOR:      EQU     1 
-602b			VER_MINOR:      EQU     0 
-602b			VER_REVISION:   EQU     0 
-602b			; 
-602b			                ;ORG    0H 
-602b			CMD_START: 
-602b f3			                DI 
-602c ed 73 16 f2	                LD      (SAVESP),SP 
+6016 cd 5b 60		                CALL    ENTRY_SETUP 
+6019 c9			                RET 
+601a			NEWJPTBL: 
+601a c3 1d 60		                JP      NEW_CMD 
+601d			NEW_CMD: 
+601d			                INCLUDE "esp32pc8001sio.asm" 
+601d			;******************************************************************************** 
+601d			; 
+601d			; Created by tan (trinity09181718@gmail.com) 
+601d			; Copyright (c) 2022 tan 
+601d			; All rights reserved. 
+601d			; 
+601d			; Please contact trinity09181718@gmail.com if you need a commercial license. 
+601d			; This software is available under GPL v3. 
+601d			; 
+601d			;******************************************************************************** 
+601d			; 
+601d			; Implementation contents as N-BASIC command extension 
+601d			; 
+601d			; CMD BME 
+601d			; CMD FTPLIST 
+601d			; CMD FTPGET,nnn 
+601d			; CMD FTPGET,nnn,&hXXXX 
+601d			; CMD SNTP 
+601d			; CMD SPILIST 
+601d			; CMD SPIGET,nnn 
+601d			; CMD SPIGET,nnn,&hXXXX 
+601d			; CMD VER 
+601d			; 
+601d			; Implementation contents as N80-BASIC command extension 
+601d			; 
+601d			; MAT BME 
+601d			; MAT FTPLIST 
+601d			; MAT FTPGET,nnn 
+601d			; MAT FTPGET,nnn,&hXXXX 
+601d			; MAT SNTP 
+601d			; MAT SPILIST 
+601d			; MAT SPIGET,nnn 
+601d			; MAT SPIGET,nnn,&hXXXX 
+601d			; MAT VER 
+601d			; 
+601d			;******************************************************************************** 
+601d			; 更新履歴 
+601d			; 2022/10/01 v1.0.1 spiffs関連実装 
+601d			;                   PC-8001とPC-8001mkIIのboot判定とフックコマンドの切り替え 
+601d			;                   PC-8001mkII RS-232C 受信割込9600bps実装 
+601d			;                   cmd ftpget or mat ftpget or cmd spiget or mat spigetにて 
+601d			;                   PC-8001時EA00H or PC-8001mkII E600H 以上に入りこむメモリー 
+601d			;                   オーバー判定と受信不良の不具合改修 
+601d			;                   (cmt Scramble:C010H~E9FFHが顕著) 
+601d			;                   cmd sntp or mat sntp で月がBCDとして設定されてしまう不具合改修 
+601d			; 2022/09/17 v1.0.0 リリース 
+601d			; 2022/08/07 v1.0.0 GitHub 公開 
+601d			;******************************************************************************** 
+601d			; 
+601d			; CONSTANT CONTROL CODE 
+601d			; 
+601d			NUL:            EQU     00H 
+601d			SOH:            EQU     01H 
+601d			STX:            EQU     02H 
+601d			EOT:            EQU     04H 
+601d			ACK:            EQU     06H 
+601d			BS:             EQU     08H 
+601d			LF:             EQU     0AH 
+601d			CR:             EQU     0DH 
+601d			NAK:            EQU     15H 
+601d			CAN:            EQU     18H 
+601d			ESC:            EQU     1BH 
+601d			; 
+601d			; CONSTANT I/O PORT 
+601d			; 
+601d			KEYBRD9:        EQU     09H 
+601d			USARTDW:        EQU     20H 
+601d			USARTCW:        EQU     21H             ; MODE SETUP 
+601d			                                        ; 76543210 
+601d			                                        ; ||||||++--- BAUD RATE FACTOR 
+601d			                                        ; ||||||      00 : SYNC MODE 
+601d			                                        ; ||||||      01 : 1X 
+601d			                                        ; ||||||      10 : 16X 
+601d			                                        ; ||||||      11 : 64X 
+601d			                                        ; ||||++----- CHARACTER LENGTH 
+601d			                                        ; ||||        00 : 5BITS 
+601d			                                        ; ||||        01 : 6BITS 
+601d			                                        ; ||||        10 : 7BITS 
+601d			                                        ; ||||        11 : 8BITS 
+601d			                                        ; |||+------- PARITY ENABLE 
+601d			                                        ; |||         1 : ENABLE 
+601d			                                        ; |||         0 : DISABLE 
+601d			                                        ; ||+-------- EVEN PARITY GENARATION/CHECK 
+601d			                                        ; ||          1 : EVEN 
+601d			                                        ; ||          0 : ODD 
+601d			                                        ; ++--------- NUMBER OF STOP BITS 
+601d			                                        ;             00 : INVALID 
+601d			                                        ;             01 : 1 BIT 
+601d			                                        ;             10 : 1.5 BITS 
+601d			                                        ;             11 : 2 BITS 
+601d			                                        ; 
+601d			                                        ; COMMAND SETUP 
+601d			                                        ; 76543210 
+601d			                                        ; |||||||+--- TRANSMIT ENABLE 
+601d			                                        ; |||||||     1 : ENABLE 
+601d			                                        ; |||||||     0 : DISABLE 
+601d			                                        ; ||||||+---- DATA TERMINAL READY 
+601d			                                        ; ||||||      "high" will force ~DTR output zero 
+601d			                                        ; |||||+----- RECEIVE ENABLE 
+601d			                                        ; |||||       1 : ENABLE 
+601d			                                        ; |||||       0 : DISABLE 
+601d			                                        ; ||||+------ SEND BREAK CHARACTER 
+601d			                                        ; ||||        1 : forces TxD "low" 
+601d			                                        ; ||||        0 : normal operation 
+601d			                                        ; |||+------- ERROR RESET 
+601d			                                        ; |||         1 : reset all error flags PE,OE,FE 
+601d			                                        ; ||+-------- REQUEST TO SEND 
+601d			                                        ; ||          "high" will force ~RTS output zero 
+601d			                                        ; |+--------- INTERNAL RESET 
+601d			                                        ; |           "high" returns USART to Mode Instruction Format 
+601d			                                        ; +---------- ENTER HUNT MODE 
+601d			                                        ;             1 = enable search for Sync Characters 
+601d			                                        ; 
+601d			                                        ; STATUS READ 
+601d			                                        ; 76543210 
+601d			                                        ; |||||||+--- TxRDY 
+601d			                                        ; ||||||+---- RxRDY 
+601d			                                        ; |||||+----- TxEMPTY 
+601d			                                        ; ||||+------ PE(PARITY ERROR) 
+601d			                                        ; |||+------- OE(OVERRUN ERROR) 
+601d			                                        ; ||+-------- FE(FRAMING ERROR) 
+601d			                                        ; |+--------- SYNDET 
+601d			                                        ; +---------- DSR 
+601d			CONTROL1:       EQU     30H 
+601d			INTLEVEL:       EQU     0E4H 
+601d			INTMASK:        EQU     0E6H 
+601d			; 
+601d			; CONSTANT PC-8001mkII ROM BASIC CMD ENTRY 
+601d			; 
+601d			PC8001MK2_NMODE:        EQU     1875H 
+601d			PC8001MK2_N80MODE:      EQU     0E730H 
+601d			; 
+601d			; CONSTANT ROM BASIC ROUTINE 
+601d			; 
+601d			ROM_BASPROMPT:  EQU     0081H 
+601d			ROM_DSPCHR:     EQU     0257H 
+601d			ROM_MOVECURSOR: EQU     03A9H 
+601d			ROM_DSPCURSOR:  EQU     0BE2H 
+601d			ROM_BEEP:       EQU     0D43H 
+601d			ROM_KEYWAIT:    EQU     0F75H 
+601d			ROM_KEYSCAN:    EQU     0FACH 
+601d			ROM_TIMEREAD:   EQU     1602H 
+601d			ROM_TIMEWRITE:  EQU     1663H 
+601d			ROM_PC8001CHK:  EQU     175FH 
+601d			ROM_BIN2DECASC: EQU     309FH 
+601d			ROM_SYNERR:     EQU     3BDFH 
+601d			ROM_MSGOUT:     EQU     52EDH 
+601d			ROM_MON_UNEXT:  EQU     5C35H 
+601d			ROM_HEXASC2BIN: EQU     5E4BH 
+601d			ROM_DSPHEX4:    EQU     5EC0H 
+601d			ROM_CMPHLDE:    EQU     5ED3H 
+601d			ROM_DSP1CHR:    EQU     5FB0H 
+601d			ROM_DSPCRLF:    EQU     5FCAH 
+601d			; 
+601d			; CONSTANT ROM BASIC WORK AREA 
+601d			; 
+601d			PC8001RAM_TOP:  EQU     8000H 
+601d			VECTOR_TBL_SIO: EQU     8000H 
+601d			N80ROM_WORKTOP: EQU     0E600H 
+601d			NROM_WORKTOP:   EQU     0EA00H 
+601d			LAST_INTLEVEL:  EQU     0EA55H 
+601d			FLG_INTEXEC:    EQU     0EA56H 
+601d			FUNKEY_DISPSTS: EQU     0EA60H 
+601d			CRT_TEXT_ROWS:  EQU     0EA62H 
+601d			CURSOR_YPOS:    EQU     0EA63H 
+601d			CURSOR_XPOS:    EQU     0EA64H 
+601d			CRT_TEXT_COLS:  EQU     0EA65H 
+601d			CTL1_OUTDATA:   EQU     0EA66H 
+601d			BCD_TIME_SEC:   EQU     0EA76H 
+601d			BCD_TIME_YEAR:  EQU     0EA7BH      
+601d			OUTPUT_DEVICE:  EQU     0EB49H 
+601d			BASAREA_TOP:    EQU     0EB54H 
+601d			RS232C_CH1BUF:  EQU     0EDCEH                  ; AREA DS 128 
+601d			RS232C_CH2BUF:  EQU     0EE4EH                  ; AREA DS 128 
+601d			VARAREA_TOP:    EQU     0EFA0H 
+601d			ARRAYAREA_TOP:  EQU     0EFA2H 
+601d			FREEAREA_TOP:   EQU     0EFA4H 
+601d			BIN_ACC:        EQU     0F0A8H 
+601d			CMD_ENTRY:      EQU     0F0FCH 
+601d			MAT_ENTRY:      EQU     0F111H 
+601d			; 
+601d			; N-BASIC ROM FREE AREA1 : F216~F2FF 
+601d			; N-BASIC ROM FREE AREA2 : FF3D~FFFF 
+601d			; CONSTANT ESP32PC8001SIO WORK AREA 
+601d			; 
+601d			SAVESP:         EQU     0F216H                  ; WORD DW 
+601d			LISTCNT:        EQU     0F218H                  ; WORD DW 
+601d			SELLISTNO:      EQU     0F21AH                  ; WORD DW 
+601d			LOADADRS:       EQU     0F21CH                  ; WORD DW 
+601d			EXECADRS:       EQU     0F21EH                  ; WORD DW 
+601d			LOAD_ENDADRS:   EQU     0F220H                  ; WORD DW    
+601d			LOADSIZE:       EQU     0F222H                  ; WORD DW 
+601d			SAVESIOIRQ:     EQU     0F224H                  ; WORD DW 
+601d			ROM_WORKTOP:    EQU     0F226H                  ; WORD DW 
+601d			EXT_ENTRY:      EQU     0F228H                  ; WORD DW 
+601d			MODEWORD:       EQU     0F22AH                  ; BYTE DB 
+601d			CTLWORD:        EQU     0F22BH                  ; BYTE DB 
+601d			EXTNO:          EQU     0F22CH                  ; BYTE DB 
+601d			CHKBLKNO:       EQU     0F22DH                  ; BYTE DB 
+601d			LFRECVCOUNT:    EQU     0F22EH                  ; BYTE DB 
+601d			RCVBUF_RPOS:    EQU     0F22FH                  ; BYTE DB 
+601d			RCVBUF_WPOS:    EQU     0F230H                  ; BYTE DB 
+601d			SAVE_ENTRY:     EQU     0F231H                  ; AREA DS 3 
+601d			DISPBUF_TOP:    EQU     0F240H                  ; AREA DS 
+601d			FLGDATA:        EQU     0F2FFH                  ; BYTE DB       76543210 
+601d			                                                ;               |||||||+--- <CR><LF> first send 
+601d			                                                ;               ||||||+---- load basic cmt type        
+601d			                                                ;               |||||+----- sio recv time out (5sec) 
+601d			                                                ;               ||||+------ sio recv cancel (keyboard STOP key) 
+601d			                                                ;               |||+------- enable keyboard STOP key check 
+601d			                                                ;               ||+-------- exec machine PC-8001 
+601d			                                                ;               |+--------- reserve 
+601d			                                                ;               +---------- reserve 
+601d			FLG_FIRSTSEND:  EQU     00000001B 
+601d			FLG_LOADBAS:    EQU     00000010B 
+601d			FLG_RCVTIMEOUT: EQU     00000100B 
+601d			FLG_RCVCANCEL:  EQU     00001000B 
+601d			FLG_ENABLESTOP: EQU     00010000B 
+601d			FLG_EXECPC8001: EQU     00100000B 
+601d			; 
+601d			SNDBUF_TOP:     EQU     RS232C_CH1BUF           ; AREA DS 
+601d			RCVBUF_TOP:     EQU     RS232C_CH1BUF           ; AREA DS 
+601d			RCVBUF_HEADER:  EQU     RS232C_CH1BUF           ; BYTE DB 
+601d			RCVBUF_BLKNO:   EQU     RS232C_CH1BUF +1        ; BYTE DB 
+601d			RCVBUF_CBLKNO:  EQU     RS232C_CH1BUF +2        ; BYTE DB 
+601d			RCVBUF_DATA:    EQU     RS232C_CH1BUF +3        ; AREA DS 
+601d			RCVBUF_CHKSUM:  EQU     RCVBUF_DATA +128        ; BYTE DB 
+601d			RCVBUF_BOTTOM:  EQU     RCVBUF_CHKSUM           ; BYTE DB 
+601d			; 
+601d			; CONSTANT ESP32PC8001SIO VERSION DATA 
+601d			; 
+601d			VER_MAJOR:      EQU     1 
+601d			VER_MINOR:      EQU     0 
+601d			VER_REVISION:   EQU     1 
+601d			; 
+601d			                ;ORG    0H 
+601d			; 
+601d			; 
+601d			; 
+601d			EXT_START:                                      ; SP RETURN ADRS 
+601d c5			                PUSH    BC 
+601e d5			                PUSH    DE 
+601f cd 8a 66		                CALL    PARSER_EXTPARAM 
+6022 d1			                POP     DE 
+6023 c1			                POP     BC 
+6024 38 0e		                JR      C,EXT_NON 
+6026 f3			                DI 
+6027 ed 73 16 f2	                LD      (SAVESP),SP 
+602b eb			                EX      DE,HL 
+602c 21 ff ff		                LD      HL,0FFFFH 
+602f f9			                LD      SP,HL 
 6030 eb			                EX      DE,HL 
-6031 21 ff ff		                LD      HL,0FFFFH 
-6034 f9			                LD      SP,HL 
-6035 eb			                EX      DE,HL 
-6036 fb			                EI 
-6037 cd fa 64		                CALL    PARSER_CMDPARAM 
-603a da 50 60		                JP      C,CMD_SYNERR_EXIT 
-603d fd e9		                JP      (IY) 
-603f			CMD_EXIT: 
-603f af			                XOR     A 
-6040			CMD_EXIT000: 
-6040 f3			                DI 
-6041 eb			                EX      DE,HL 
-6042 2a 16 f2		                LD      HL,(SAVESP) 
-6045 f9			                LD      SP,HL 
-6046 eb			                EX      DE,HL 
-6047 fb			                EI 
-6048 fe 00		                CP      0 
-604a 20 01		                JR      NZ,CMD_EXIT010 
-604c c9			                RET 
-604d			CMD_EXIT010: 
-604d d1			                POP     DE 
-604e dd e9		                JP      (IX) 
-6050			CMD_SYNERR_EXIT: 
-6050 3e 01		                LD      A,1 
-6052 dd 21 df 3b	                LD      IX,ROM_SYNERR 
-6056 18 e8		                JR      CMD_EXIT000 
-6058			CMD_MYERR_EXIT: 
-6058 3e 02		                LD      A,2 
-605a dd 21 81 00	                LD      IX,ROM_BASPROMPT 
-605e 18 e0		                JR      CMD_EXIT000 
-6060			; 
-6060			; 
-6060			; 
-6060			CMD_BME: 
-6060 e5			                PUSH    HL 
-6061 cd 54 66		                CALL    INIT_SIO 
-6064 21 59 68		                LD      HL,TBL_CMD_BME 
-6067 11 70 f2		                LD      DE,SNDBUF_TOP 
-606a 01 03 00		                LD      BC,3 
-606d ed b0		                LDIR 
-606f 21 f2 68		                LD      HL,TBL_CRLF 
-6072 01 02 00		                LD      BC,2 
-6075 ed b0		                LDIR 
-6077 06 05		                LD      B,5 
-6079 cd 83 67		                CALL    SENDBUF_OUT 
-607c 06 01		                LD      B,1 
-607e cd 8e 67		                CALL    RECVBUF_IN 
-6081 3a ff f2		                LD      A,(FLGDATA) 
-6084 e6 04		                AND     FLG_RCVTIMEOUT 
-6086 c2 c7 64		                JP      NZ,CMD_ERR1 
-6089 11 59 68		                LD      DE,TBL_CMD_BME 
-608c 06 03		                LD      B,3 
-608e cd c5 67		                CALL    RECVBUF_CHK 
-6091 da cc 64		                JP      C,CMD_ERR2 
-6094 06 00		                LD      B,0 
-6096 cd a6 60		                CALL    CMD_BME_MSG 
-6099 06 01		                LD      B,1 
-609b cd a6 60		                CALL    CMD_BME_MSG 
-609e 06 02		                LD      B,2 
-60a0 cd a6 60		                CALL    CMD_BME_MSG 
-60a3 c3 f2 64		                JP      CMD_END 
-60a6			CMD_BME_MSG: 
-60a6 e5			                PUSH    HL 
-60a7 78			                LD      A,B 
-60a8 fe 01		                CP      1 
-60aa 28 09		                JR      Z,CMD_BME_000 
-60ac fe 02		                CP      2 
-60ae 28 0a		                JR      Z,CMD_BME_010 
-60b0 21 aa 68		                LD      HL,TBL_TEMP_MSG0 
-60b3 18 08		                JR      CMD_BME_020 
-60b5			CMD_BME_000: 
-60b5 21 b5 68		                LD      HL,TBL_HUMI_MSG0 
-60b8 18 03		                JR      CMD_BME_020 
-60ba			CMD_BME_010: 
-60ba 21 bf 68		                LD      HL,TBL_PRESS_MSG0 
-60bd			CMD_BME_020: 
-60bd 11 30 f2		                LD      DE,DISPBUF_TOP 
-60c0			CMD_BME_L010: 
-60c0 7e			                LD      A,(HL) 
-60c1 12			                LD      (DE),A 
-60c2 23			                INC     HL 
-60c3 13			                INC     DE 
-60c4 fe 00		                CP      0 
-60c6 20 f8		                JR      NZ,CMD_BME_L010 
-60c8 e1			                POP     HL 
-60c9 1b			                DEC     DE 
-60ca			CMD_BME_L020: 
-60ca 7e			                LD      A,(HL) 
-60cb fe 2c		                CP      ',' 
-60cd 28 09		                JR      Z,CMD_BME_050 
-60cf fe 0d		                CP      CR 
-60d1 28 05		                JR      Z,CMD_BME_050 
-60d3 12			                LD      (DE),A 
-60d4 23			                INC     HL 
-60d5 13			                INC     DE 
-60d6 18 f2		                JR      CMD_BME_L020 
-60d8			CMD_BME_050: 
-60d8 23			                INC     HL 
-60d9 e5			                PUSH    HL 
-60da 78			                LD      A,B 
-60db fe 01		                CP      1 
-60dd 28 09		                JR      Z,CMD_BME_060 
-60df fe 02		                CP      2 
-60e1 28 0a		                JR      Z,CMD_BME_070 
-60e3 21 b2 68		                LD      HL,TBL_TEMP_MSG1 
-60e6 18 08		                JR      CMD_BME_L030 
-60e8			CMD_BME_060: 
-60e8 21 bd 68		                LD      HL,TBL_HUMI_MSG1 
-60eb 18 03		                JR      CMD_BME_L030 
-60ed			CMD_BME_070: 
-60ed 21 c7 68		                LD      HL,TBL_PRESS_MSG1 
-60f0			CMD_BME_L030: 
-60f0 7e			                LD      A,(HL) 
-60f1 12			                LD      (DE),A 
-60f2 23			                INC     HL 
-60f3 13			                INC     DE 
-60f4 fe 00		                CP      0 
-60f6 20 f8		                JR      NZ,CMD_BME_L030 
-60f8 e1			                POP     HL 
-60f9 1b			                DEC     DE 
-60fa c5			                PUSH    BC 
-60fb d5			                PUSH    DE 
-60fc e5			                PUSH    HL 
-60fd cd db 67		                CALL    MSG_DISP 
-6100 e1			                POP     HL 
-6101 d1			                POP     DE 
-6102 c1			                POP     BC 
-6103 c9			                RET 
-6104			; 
-6104			; 
-6104			; 
-6104			CMD_FTPLIST: 
-6104 e5			                PUSH    HL 
-6105 cd 54 66		                CALL    INIT_SIO 
-6108 21 8a 68		                LD      HL,TBL_CMD_FTPLIST2 
-610b 11 70 f2		                LD      DE,SNDBUF_TOP 
-610e 01 07 00		                LD      BC,7 
-6111 ed b0		                LDIR 
-6113 21 f2 68		                LD      HL,TBL_CRLF 
-6116 01 02 00		                LD      BC,2 
-6119 ed b0		                LDIR 
-611b 06 09		                LD      B,9 
-611d cd 83 67		                CALL    SENDBUF_OUT 
-6120 06 01		                LD      B,1 
-6122 cd 8e 67		                CALL    RECVBUF_IN 
-6125 3a ff f2		                LD      A,(FLGDATA) 
-6128 e6 04		                AND     FLG_RCVTIMEOUT 
-612a c2 c7 64		                JP      NZ,CMD_ERR1 
-612d 11 8a 68		                LD      DE,TBL_CMD_FTPLIST2 
-6130 06 07		                LD      B,7 
-6132 cd c5 67		                CALL    RECVBUF_CHK 
-6135 da cc 64		                JP      C,CMD_ERR2 
-6138 e5			                PUSH    HL 
-6139 21 9d 68		                LD      HL,TBL_COUNT_MSG0 
-613c 11 30 f2		                LD      DE,DISPBUF_TOP 
-613f			CMD_FTPLIST_L000: 
-613f 7e			                LD      A,(HL) 
-6140 12			                LD      (DE),A 
-6141 23			                INC     HL 
-6142 13			                INC     DE 
-6143 fe 00		                CP      0 
-6145 20 f8		                JR      NZ,CMD_FTPLIST_L000 
-6147 1b			                DEC     DE 
-6148 e1			                POP     HL 
-6149 e5			                PUSH    HL 
-614a 01 03 00		                LD      BC,3 
-614d ed b0		                LDIR 
-614f cd db 67		                CALL    MSG_DISP 
-6152 e1			                POP     HL 
-6153			; 
-6153 7e			                LD      A,(HL) 
-6154 e6 0f		                AND     0FH 
-6156 5f			                LD      E,A 
-6157 3e 64		                LD      A,100 
-6159 e5			                PUSH    HL 
-615a cd ee 67		                CALL    MUL_88_2_16 
-615d 22 18 f2		                LD      (LISTCNT),HL 
-6160 e1			                POP     HL 
-6161 23			                INC     HL 
+6031 fb			                EI 
+6032 fd e9		                JP      (IY) 
+6034			EXT_NON: 
+6034 dd 2a 32 f2	                LD      IX,(SAVE_ENTRY + 1)     ; IX -> ORIGINAL ENTRY 
+6038			                                                ; STACK DATA RETURN ADRS HOLD 
+6038 dd e9		                JP      (IX)                    ; JUMP ORIGINAL ENTRY 
+603a			EXT_EXIT: 
+603a af			                XOR     A 
+603b 18 0e		                JR      EXT_010 
+603d			EXT_MYERR_EXIT: 
+603d 3e 01		                LD      A,1 
+603f dd 21 81 00	                LD      IX,ROM_BASPROMPT        ; IX -> (SP) RETURN ADRS 
+6043 18 06		                JR      EXT_010 
+6045			EXT_DLEXEC_EXIT: 
+6045 3e 02		                LD      A,2 
+6047 dd 2a 1e f2	                LD      IX,(EXECADRS)           ; IX -> (SP) RETURN ADRS 
+604b			EXT_010: 
+604b f3			                DI 
+604c eb			                EX      DE,HL 
+604d 2a 16 f2		                LD      HL,(SAVESP) 
+6050 f9			                LD      SP,HL 
+6051 eb			                EX      DE,HL 
+6052 fb			                EI 
+6053 fe 00		                CP      0 
+6055 c8			                RET     Z 
+6056 f3			                DI 
+6057 dd e3		                EX      (SP),IX                 ; STACK DATA RETURN ADRS CHANGE         
+6059 fb			                EI 
+605a c9			                RET 
+605b			; 
+605b			; 
+605b			; 
+605b			ENTRY_SETUP: 
+605b c5			                PUSH    BC 
+605c d5			                PUSH    DE 
+605d e5			                PUSH    HL 
+605e af			                XOR     A 
+605f 32 ff f2		                LD      (FLGDATA),A 
+6062 21 00 00		                LD      HL,0 
+6065 22 28 f2		                LD      (EXT_ENTRY),HL 
+6068 3a 5f 17		                LD      A,(ROM_PC8001CHK) 
+606b fe 80		                CP      80H             ; N-BASIC IMPLEMENTED IN PC-8001 
+606d 28 11		                JR      Z,ENTRY_SETUP_020 
+606f fe af		                CP      0AFH            ; N-BASIC IMPLEMENTED IN PC-8001mkII 
+6071 28 02		                JR      Z,ENTRY_SETUP_010 
+6073 18 56		                JR      ENTRY_SETUP_080 
+6075			ENTRY_SETUP_010: 
+6075 2a fd f0		                LD      HL,(CMD_ENTRY + 1) 
+6078 11 30 e7		                LD      DE,PC8001MK2_N80MODE 
+607b cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
+607e			                                        ; HL<DE : 0  1 
+607e			                                        ; HL=DE : 1  0 
+607e			                                        ; HL>DE : 0  0 
+607e 28 08		                JR      Z,ENTRY_SETUP_030 
+6080			ENTRY_SETUP_020: 
+6080 21 fc f0		                LD      HL,CMD_ENTRY 
+6083 22 28 f2		                LD      (EXT_ENTRY),HL 
+6086 18 06		                JR      ENTRY_SETUP_040 
+6088			ENTRY_SETUP_030: 
+6088 21 11 f1		                LD      HL,MAT_ENTRY 
+608b 22 28 f2		                LD      (EXT_ENTRY),HL 
+608e			ENTRY_SETUP_040: 
+608e 2a 28 f2		                LD      HL,(EXT_ENTRY) 
+6091 11 1a 60		                LD      DE,NEWJPTBL 
+6094 06 03		                LD      B,3 
+6096			ENTRY_SETUP_L010: 
+6096 4e			                LD      C,(HL) 
+6097 1a			                LD      A,(DE) 
+6098 b9			                CP      C 
+6099 20 06		                JR      NZ,ENTRY_SETUP_050 
+609b 23			                INC     HL 
+609c 13			                INC     DE 
+609d 10 f7		                DJNZ    ENTRY_SETUP_L010 
+609f 18 2a		                JR      ENTRY_SETUP_080 
+60a1			ENTRY_SETUP_050: 
+60a1 2a 28 f2		                LD      HL,(EXT_ENTRY) 
+60a4 11 31 f2		                LD      DE,SAVE_ENTRY 
+60a7 06 03		                LD      B,3 
+60a9			ENTRY_SETUP_L020: 
+60a9 4e			                LD      C,(HL) 
+60aa 1a			                LD      A,(DE) 
+60ab b9			                CP      C 
+60ac 20 06		                JR      NZ,ENTRY_SETUP_060 
+60ae 23			                INC     HL 
+60af 13			                INC     DE 
+60b0 10 f7		                DJNZ    ENTRY_SETUP_L020 
+60b2 18 0b		                JR      ENTRY_SETUP_070 
+60b4			ENTRY_SETUP_060: 
+60b4 2a 28 f2		                LD      HL,(EXT_ENTRY) 
+60b7 11 31 f2		                LD      DE,SAVE_ENTRY 
+60ba 01 03 00		                LD      BC,3 
+60bd ed b0		                LDIR 
+60bf			ENTRY_SETUP_070: 
+60bf 21 1a 60		                LD      HL,NEWJPTBL 
+60c2 ed 5b 28 f2	                LD      DE,(EXT_ENTRY) 
+60c6 01 03 00		                LD      BC,3 
+60c9 ed b0		                LDIR 
+60cb			ENTRY_SETUP_080: 
+60cb e1			                POP     HL 
+60cc d1			                POP     DE 
+60cd c1			                POP     BC 
+60ce c9			                RET 
+60cf			; 
+60cf			; 
+60cf			; 
+60cf			EXT_BME: 
+60cf e5			                PUSH    HL 
+60d0 cd f4 67		                CALL    INIT_SIO 
+60d3 da 66 66		                JP      C,EXT_ERR5 
+60d6 21 f6 6a		                LD      HL,TBL_EXT_BME 
+60d9 11 ce ed		                LD      DE,SNDBUF_TOP 
+60dc 01 03 00		                LD      BC,3 
+60df ed b0		                LDIR 
+60e1 21 b7 6b		                LD      HL,TBL_CRLF 
+60e4 01 02 00		                LD      BC,2 
+60e7 ed b0		                LDIR 
+60e9 06 05		                LD      B,5 
+60eb cd 03 6a		                CALL    SENDBUF_OUT 
+60ee 06 01		                LD      B,1 
+60f0 cd 0e 6a		                CALL    RECVBUF_IN 
+60f3 3a ff f2		                LD      A,(FLGDATA) 
+60f6 e6 04		                AND     FLG_RCVTIMEOUT 
+60f8 c2 52 66		                JP      NZ,EXT_ERR1 
+60fb 11 f6 6a		                LD      DE,TBL_EXT_BME 
+60fe 06 03		                LD      B,3 
+6100 cd 45 6a		                CALL    RECVBUF_CHK 
+6103 da 57 66		                JP      C,EXT_ERR2 
+6106 06 00		                LD      B,0 
+6108 cd 18 61		                CALL    EXT_BME_MSG 
+610b 06 01		                LD      B,1 
+610d cd 18 61		                CALL    EXT_BME_MSG 
+6110 06 02		                LD      B,2 
+6112 cd 18 61		                CALL    EXT_BME_MSG 
+6115 c3 82 66		                JP      EXT_END 
+6118			EXT_BME_MSG: 
+6118 e5			                PUSH    HL 
+6119 78			                LD      A,B 
+611a fe 01		                CP      1 
+611c 28 09		                JR      Z,EXT_BME_000 
+611e fe 02		                CP      2 
+6120 28 0a		                JR      Z,EXT_BME_010 
+6122 21 6f 6b		                LD      HL,TBL_TEMP_MSG0 
+6125 18 08		                JR      EXT_BME_020 
+6127			EXT_BME_000: 
+6127 21 7a 6b		                LD      HL,TBL_HUMI_MSG0 
+612a 18 03		                JR      EXT_BME_020 
+612c			EXT_BME_010: 
+612c 21 84 6b		                LD      HL,TBL_PRESS_MSG0 
+612f			EXT_BME_020: 
+612f 11 40 f2		                LD      DE,DISPBUF_TOP 
+6132			EXT_BME_L010: 
+6132 7e			                LD      A,(HL) 
+6133 12			                LD      (DE),A 
+6134 23			                INC     HL 
+6135 13			                INC     DE 
+6136 fe 00		                CP      0 
+6138 20 f8		                JR      NZ,EXT_BME_L010 
+613a e1			                POP     HL 
+613b 1b			                DEC     DE 
+613c			EXT_BME_L020: 
+613c 7e			                LD      A,(HL) 
+613d fe 2c		                CP      ',' 
+613f 28 09		                JR      Z,EXT_BME_050 
+6141 fe 0d		                CP      CR 
+6143 28 05		                JR      Z,EXT_BME_050 
+6145 12			                LD      (DE),A 
+6146 23			                INC     HL 
+6147 13			                INC     DE 
+6148 18 f2		                JR      EXT_BME_L020 
+614a			EXT_BME_050: 
+614a 23			                INC     HL 
+614b e5			                PUSH    HL 
+614c 78			                LD      A,B 
+614d fe 01		                CP      1 
+614f 28 09		                JR      Z,EXT_BME_060 
+6151 fe 02		                CP      2 
+6153 28 0a		                JR      Z,EXT_BME_070 
+6155 21 77 6b		                LD      HL,TBL_TEMP_MSG1 
+6158 18 08		                JR      EXT_BME_L030 
+615a			EXT_BME_060: 
+615a 21 82 6b		                LD      HL,TBL_HUMI_MSG1 
+615d 18 03		                JR      EXT_BME_L030 
+615f			EXT_BME_070: 
+615f 21 8c 6b		                LD      HL,TBL_PRESS_MSG1 
+6162			EXT_BME_L030: 
 6162 7e			                LD      A,(HL) 
-6163 e6 0f		                AND     0FH 
-6165 5f			                LD      E,A 
-6166 3e 0a		                LD      A,10 
-6168 e5			                PUSH    HL 
-6169 cd ee 67		                CALL    MUL_88_2_16 
-616c eb			                EX      DE,HL 
-616d 2a 18 f2		                LD      HL,(LISTCNT) 
-6170 19			                ADD     HL,DE 
-6171 22 18 f2		                LD      (LISTCNT),HL 
-6174 e1			                POP     HL 
-6175 23			                INC     HL 
-6176 7e			                LD      A,(HL) 
-6177 e6 0f		                AND     0FH 
-6179 5f			                LD      E,A 
-617a 3e 01		                LD      A,1 
-617c e5			                PUSH    HL 
-617d cd ee 67		                CALL    MUL_88_2_16 
-6180 eb			                EX      DE,HL 
-6181 2a 18 f2		                LD      HL,(LISTCNT) 
-6184 19			                ADD     HL,DE 
-6185 22 18 f2		                LD      (LISTCNT),HL 
-6188 e1			                POP     HL 
-6189 2a 18 f2		                LD      HL,(LISTCNT) 
-618c 11 00 00		                LD      DE,0 
-618f cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
-6192			                                        ; HL<DE : 0  1 
-6192			                                        ; HL=DE : 1  0 
-6192			                                        ; HL>DE : 0  0 
-6192 ca f2 64		                JP      Z,CMD_END 
-6195 ed 53 1a f2	                LD      (SELLISTNO),DE 
-6199			CMD_FTPLIST_L010: 
-6199 21 30 f2		                LD      HL,DISPBUF_TOP 
-619c ed 5b 1a f2	                LD      DE,(SELLISTNO) 
-61a0 ed 53 a8 f0	                LD      (BIN_ACC),DE 
-61a4 01 00 00		                LD      BC,0 
-61a7 cd 9f 30		                CALL    ROM_BIN2DECASC 
-61aa 21 98 68		                LD      HL,TBL_CMD_LIST 
-61ad 11 70 f2		                LD      DE,SNDBUF_TOP 
-61b0 01 05 00		                LD      BC,5 
-61b3 ed b0		                LDIR 
-61b5 21 32 f2		                LD      HL,DISPBUF_TOP + 2 
-61b8 01 03 00		                LD      BC,3 
-61bb ed b0		                LDIR 
-61bd 21 f2 68		                LD      HL,TBL_CRLF 
-61c0 01 02 00		                LD      BC,2 
-61c3 ed b0		                LDIR 
-61c5 06 0a		                LD      B,10 
-61c7 cd 83 67		                CALL    SENDBUF_OUT 
-61ca 06 01		                LD      B,1 
-61cc cd 8e 67		                CALL    RECVBUF_IN 
-61cf 3a ff f2		                LD      A,(FLGDATA) 
-61d2 e6 04		                AND     FLG_RCVTIMEOUT 
-61d4 c2 c7 64		                JP      NZ,CMD_ERR1 
-61d7 11 98 68		                LD      DE,TBL_CMD_LIST 
-61da 06 04		                LD      B,4 
-61dc cd c5 67		                CALL    RECVBUF_CHK 
-61df da cc 64		                JP      C,CMD_ERR2 
-61e2 11 30 f2		                LD      DE,DISPBUF_TOP 
-61e5 01 03 00		                LD      BC,3 
-61e8 ed b0		                LDIR 
-61ea 3e 3a		                LD      A,':' 
-61ec 12			                LD      (DE),A 
-61ed 13			                INC     DE 
-61ee 3a 65 ea		                LD      A,(CRT_TEXT_COLS) 
-61f1 fe 48		                CP      72 
-61f3 28 1a		                JR      Z,CMD_FTPLIST_040 
-61f5 fe 50		                CP      80 
-61f7 28 16		                JR      Z,CMD_FTPLIST_040 
-61f9 06 04		                LD      B,4 
-61fb			CMD_FTPLIST_010: 
-61fb 7e			                LD      A,(HL) 
-61fc 23			                INC     HL 
-61fd fe 2c		                CP      ',' 
-61ff 28 02		                JR      Z,CMD_FTPLIST_020 
-6201 18 f8		                JR      CMD_FTPLIST_010 
-6203			CMD_FTPLIST_020: 
-6203 10 f6		                DJNZ    CMD_FTPLIST_010 
-6205			CMD_FTPLIST_030: 
-6205 7e			                LD      A,(HL) 
-6206 12			                LD      (DE),A 
-6207 23			                INC     HL 
-6208 13			                INC     DE 
-6209 fe 0d		                CP      CR 
-620b 28 15		                JR      Z,CMD_FTPLIST_070 
-620d 18 f6		                JR      CMD_FTPLIST_030 
-620f			CMD_FTPLIST_040: 
-620f 23			                INC     HL 
-6210			CMD_FTPLIST_L020: 
-6210 7e			                LD      A,(HL) 
-6211 fe 2c		                CP      ',' 
-6213 28 06		                JR      Z,CMD_FTPLIST_050 
-6215 fe 0d		                CP      CR 
-6217 28 09		                JR      Z,CMD_FTPLIST_070 
-6219 18 02		                JR      CMD_FTPLIST_060 
-621b			CMD_FTPLIST_050: 
-621b 3e 20		                LD      A,' ' 
-621d			CMD_FTPLIST_060: 
-621d 12			                LD      (DE),A 
-621e 23			                INC     HL 
-621f 13			                INC     DE 
-6220 18 ee		                JR      CMD_FTPLIST_L020 
-6222			CMD_FTPLIST_070: 
-6222 cd db 67		                CALL    MSG_DISP 
-6225 db 09		                IN      A,(KEYBRD9) 
-6227 57			                LD      D,A 
-6228 e6 01		                AND     00000001B 
-622a ca f2 64		                JP      Z,CMD_END 
-622d 7a			                LD      A,D 
-622e e6 80		                AND     10000000B 
-6230 20 0d		                JR      NZ,CMD_FTPLIST_090 
-6232			CMD_FTPLIST_080: 
-6232 db 09		                IN      A,(KEYBRD9) 
-6234 57			                LD      D,A 
-6235 e6 01		                AND     00000001B 
-6237 ca f2 64		                JP      Z,CMD_END 
-623a 7a			                LD      A,D 
-623b e6 80		                AND     10000000B 
-623d 28 f3		                JR      Z,CMD_FTPLIST_080 
-623f			CMD_FTPLIST_090: 
-623f 2a 18 f2		                LD      HL,(LISTCNT) 
-6242 ed 5b 1a f2	                LD      DE,(SELLISTNO) 
-6246 13			                INC     DE 
-6247 ed 53 1a f2	                LD      (SELLISTNO),DE 
-624b cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
-624e			                                        ; HL<DE : 0  1 
-624e			                                        ; HL=DE : 1  0 
-624e			                                        ; HL>DE : 0  0 
-624e c2 99 61		                JP      NZ,CMD_FTPLIST_L010 
-6251 c3 f2 64		                JP      CMD_END 
-6254			; 
-6254			; 
-6254			; 
-6254			CMD_FTPGET: 
-6254 e5			                PUSH    HL 
-6255 cd 54 66		                CALL    INIT_SIO 
-6258 21 30 f2		                LD      HL,DISPBUF_TOP 
-625b ed 5b 1a f2	                LD      DE,(SELLISTNO) 
-625f ed 53 a8 f0	                LD      (BIN_ACC),DE 
-6263 01 00 00		                LD      BC,0 
-6266 cd 9f 30		                CALL    ROM_BIN2DECASC 
-6269 21 91 68		                LD      HL,TBL_CMD_FTPGET2 
-626c 11 70 f2		                LD      DE,SNDBUF_TOP 
-626f 01 07 00		                LD      BC,7 
-6272 ed b0		                LDIR 
-6274 21 32 f2		                LD      HL,DISPBUF_TOP + 2 
-6277 01 03 00		                LD      BC,3 
-627a ed b0		                LDIR 
-627c 21 f2 68		                LD      HL,TBL_CRLF 
-627f 01 02 00		                LD      BC,2 
-6282 ed b0		                LDIR 
-6284 06 0c		                LD      B,12 
-6286 cd 83 67		                CALL    SENDBUF_OUT 
-6289 06 01		                LD      B,1 
-628b cd 8e 67		                CALL    RECVBUF_IN 
-628e 3a ff f2		                LD      A,(FLGDATA) 
-6291 e6 04		                AND     FLG_RCVTIMEOUT 
-6293 c2 c7 64		                JP      NZ,CMD_ERR1 
-6296 11 91 68		                LD      DE,TBL_CMD_FTPGET2 
-6299 06 06		                LD      B,6 
-629b cd c5 67		                CALL    RECVBUF_CHK 
-629e da cc 64		                JP      C,CMD_ERR2 
-62a1 23			                INC     HL 
-62a2 23			                INC     HL 
-62a3 23			                INC     HL 
-62a4 23			                INC     HL 
-62a5 7e			                LD      A,(HL) 
-62a6 e6 0f		                AND     0FH 
-62a8 fe 00		                CP      0 
-62aa ca d1 64		                JP      Z,CMD_ERR3 
-62ad fe 01		                CP      1 
-62af ca bd 62		                JP      Z,CMD_FTPGET_100 
-62b2 fe 02		                CP      2 
-62b4 28 1c		                JR      Z,CMD_FTPGET_110 
-62b6 fe 03		                CP      3 
-62b8 28 2a		                JR      Z,CMD_FTPGET_120 
-62ba c3 cc 64		                JP      CMD_ERR2 
-62bd			CMD_FTPGET_100: 
-62bd ed 5b 2e f2	                LD      DE,(EXECADRS) 
-62c1 e5			                PUSH    HL 
-62c2 21 00 00		                LD      HL,0 
-62c5 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
-62c8			                                        ; HL<DE : 0  1 
-62c8			                                        ; HL=DE : 1  0 
-62c8			                                        ; HL>DE : 0  0 
-62c8 e1			                POP     HL 
-62c9 ca d6 64		                JP      Z,CMD_ERR4 
-62cc ed 53 1c f2	                LD      (LOADADRS),DE 
-62d0 18 28		                JR      CMD_FTPGET_200 
-62d2			CMD_FTPGET_110: 
-62d2 3a ff f2		                LD      A,(FLGDATA) 
-62d5 f6 02		                OR      FLG_LOADBAS 
-62d7 32 ff f2		                LD      (FLGDATA),A 
-62da ed 5b 54 eb	                LD      DE,(BASAREA_TOP) 
-62de ed 53 1c f2	                LD      (LOADADRS),DE 
-62e2 18 16		                JR      CMD_FTPGET_200 
-62e4			CMD_FTPGET_120: 
-62e4 23			                INC     HL 
-62e5 23			                INC     HL 
-62e6 06 04		                LD      B,4 
-62e8 11 00 00		                LD      DE,0 
-62eb			CMD_FTPGET_130: 
-62eb 7e			                LD      A,(HL) 
-62ec e5			                PUSH    HL 
-62ed eb			                EX      DE,HL 
-62ee cd 4b 5e		                CALL    ROM_HEXASC2BIN 
-62f1 eb			                EX      DE,HL 
-62f2 e1			                POP     HL 
-62f3 23			                INC     HL 
-62f4 10 f5		                DJNZ    CMD_FTPGET_130 
-62f6 ed 53 1c f2	                LD      (LOADADRS),DE 
-62fa			CMD_FTPGET_200: 
-62fa 3a ff f2		                LD      A,(FLGDATA) 
-62fd f6 10		                OR      FLG_ENABLESTOP 
-62ff 32 ff f2		                LD      (FLGDATA),A 
-6302 3e 01		                LD      A,1 
-6304 32 23 f2		                LD      (CHKBLKNO),A 
-6307			CMD_FTPGET_L010: 
-6307 3e 15		                LD      A,NAK 
-6309 cd 78 67		                CALL    OUT_SIO 
-630c			CMD_FTPGET_L020: 
-630c cd 11 67		                CALL    IN_SIO 
-630f fe 04		                CP      EOT 
-6311 ca 96 63		                JP      Z,CMD_FTPGET_030 
-6314 fe 01		                CP      SOH 
-6316 28 2e		                JR      Z,CMD_FTPGET_010 
-6318 3a ff f2		                LD      A,(FLGDATA) 
-631b e6 04		                AND     FLG_RCVTIMEOUT 
-631d 20 e8		                JR      NZ,CMD_FTPGET_L010 
-631f 3a ff f2		                LD      A,(FLGDATA) 
-6322 e6 08		                AND     FLG_RCVCANCEL 
-6324 c2 da 63		                JP      NZ,CMD_FTPGET_CANCEL 
-6327 18 e3		                JR      CMD_FTPGET_L020 
-6329			CMD_FTPGET_L030: 
-6329 cd 11 67		                CALL    IN_SIO 
-632c fe 04		                CP      EOT 
-632e 28 66		                JR      Z,CMD_FTPGET_030 
-6330 fe 01		                CP      SOH 
-6332 28 12		                JR      Z,CMD_FTPGET_010 
-6334 3a ff f2		                LD      A,(FLGDATA) 
-6337 e6 04		                AND     FLG_RCVTIMEOUT 
-6339 c2 da 63		                JP      NZ,CMD_FTPGET_CANCEL 
-633c 3a ff f2		                LD      A,(FLGDATA) 
-633f e6 08		                AND     FLG_RCVCANCEL 
-6341 c2 da 63		                JP      NZ,CMD_FTPGET_CANCEL 
-6344 18 e3		                JR      CMD_FTPGET_L030 
-6346			CMD_FTPGET_010: 
-6346 cd cc 65		                CALL    CLR_RCVBUF 
-6349 77			                LD      (HL),A 
+6163 12			                LD      (DE),A 
+6164 23			                INC     HL 
+6165 13			                INC     DE 
+6166 fe 00		                CP      0 
+6168 20 f8		                JR      NZ,EXT_BME_L030 
+616a e1			                POP     HL 
+616b 1b			                DEC     DE 
+616c c5			                PUSH    BC 
+616d d5			                PUSH    DE 
+616e e5			                PUSH    HL 
+616f cd 5b 6a		                CALL    MSG_DISP 
+6172 e1			                POP     HL 
+6173 d1			                POP     DE 
+6174 c1			                POP     BC 
+6175 c9			                RET 
+6176			; 
+6176			; 
+6176			; 
+6176			EXT_FTPLIST: 
+6176 e5			                PUSH    HL 
+6177 cd f4 67		                CALL    INIT_SIO 
+617a da 66 66		                JP      C,EXT_ERR5 
+617d 21 3b 6b		                LD      HL,TBL_EXT_FTPLIST2 
+6180 11 ce ed		                LD      DE,SNDBUF_TOP 
+6183 01 07 00		                LD      BC,7 
+6186 ed b0		                LDIR 
+6188 21 b7 6b		                LD      HL,TBL_CRLF 
+618b 01 02 00		                LD      BC,2 
+618e ed b0		                LDIR 
+6190 06 09		                LD      B,9 
+6192 cd 03 6a		                CALL    SENDBUF_OUT 
+6195 06 01		                LD      B,1 
+6197 cd 0e 6a		                CALL    RECVBUF_IN 
+619a 3a ff f2		                LD      A,(FLGDATA) 
+619d e6 04		                AND     FLG_RCVTIMEOUT 
+619f c2 52 66		                JP      NZ,EXT_ERR1 
+61a2 11 3b 6b		                LD      DE,TBL_EXT_FTPLIST2 
+61a5 06 07		                LD      B,7 
+61a7 cd 45 6a		                CALL    RECVBUF_CHK 
+61aa da 57 66		                JP      C,EXT_ERR2 
+61ad			EXT_FTPLIST_000: 
+61ad e5			                PUSH    HL 
+61ae 21 62 6b		                LD      HL,TBL_COUNT_MSG0 
+61b1 11 40 f2		                LD      DE,DISPBUF_TOP 
+61b4			EXT_FTPLIST_L000: 
+61b4 7e			                LD      A,(HL) 
+61b5 12			                LD      (DE),A 
+61b6 23			                INC     HL 
+61b7 13			                INC     DE 
+61b8 fe 00		                CP      0 
+61ba 20 f8		                JR      NZ,EXT_FTPLIST_L000 
+61bc 1b			                DEC     DE 
+61bd e1			                POP     HL 
+61be e5			                PUSH    HL 
+61bf 01 03 00		                LD      BC,3 
+61c2 ed b0		                LDIR 
+61c4 cd 5b 6a		                CALL    MSG_DISP 
+61c7 e1			                POP     HL 
+61c8			; 
+61c8 7e			                LD      A,(HL) 
+61c9 e6 0f		                AND     0FH 
+61cb 5f			                LD      E,A 
+61cc 3e 64		                LD      A,100 
+61ce e5			                PUSH    HL 
+61cf cd 6e 6a		                CALL    MUL_88_2_16 
+61d2 22 18 f2		                LD      (LISTCNT),HL 
+61d5 e1			                POP     HL 
+61d6 23			                INC     HL 
+61d7 7e			                LD      A,(HL) 
+61d8 e6 0f		                AND     0FH 
+61da 5f			                LD      E,A 
+61db 3e 0a		                LD      A,10 
+61dd e5			                PUSH    HL 
+61de cd 6e 6a		                CALL    MUL_88_2_16 
+61e1 eb			                EX      DE,HL 
+61e2 2a 18 f2		                LD      HL,(LISTCNT) 
+61e5 19			                ADD     HL,DE 
+61e6 22 18 f2		                LD      (LISTCNT),HL 
+61e9 e1			                POP     HL 
+61ea 23			                INC     HL 
+61eb 7e			                LD      A,(HL) 
+61ec e6 0f		                AND     0FH 
+61ee 5f			                LD      E,A 
+61ef 3e 01		                LD      A,1 
+61f1 e5			                PUSH    HL 
+61f2 cd 6e 6a		                CALL    MUL_88_2_16 
+61f5 eb			                EX      DE,HL 
+61f6 2a 18 f2		                LD      HL,(LISTCNT) 
+61f9 19			                ADD     HL,DE 
+61fa 22 18 f2		                LD      (LISTCNT),HL 
+61fd e1			                POP     HL 
+61fe 2a 18 f2		                LD      HL,(LISTCNT) 
+6201 11 00 00		                LD      DE,0 
+6204 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
+6207			                                        ; HL<DE : 0  1 
+6207			                                        ; HL=DE : 1  0 
+6207			                                        ; HL>DE : 0  0 
+6207 ca 82 66		                JP      Z,EXT_END 
+620a ed 53 1a f2	                LD      (SELLISTNO),DE 
+620e			EXT_FTPLIST_L010: 
+620e af			                XOR     A 
+620f 32 2f f2		                LD      (RCVBUF_RPOS),A 
+6212 32 30 f2		                LD      (RCVBUF_WPOS),A 
+6215 21 40 f2		                LD      HL,DISPBUF_TOP 
+6218 ed 5b 1a f2	                LD      DE,(SELLISTNO) 
+621c ed 53 a8 f0	                LD      (BIN_ACC),DE 
+6220 01 00 00		                LD      BC,0 
+6223 cd 9f 30		                CALL    ROM_BIN2DECASC 
+6226 21 49 6b		                LD      HL,TBL_EXT_LIST 
+6229 11 ce ed		                LD      DE,SNDBUF_TOP 
+622c 01 05 00		                LD      BC,5 
+622f ed b0		                LDIR 
+6231 21 42 f2		                LD      HL,DISPBUF_TOP + 2 
+6234 01 03 00		                LD      BC,3 
+6237 ed b0		                LDIR 
+6239 21 b7 6b		                LD      HL,TBL_CRLF 
+623c 01 02 00		                LD      BC,2 
+623f ed b0		                LDIR 
+6241 06 0a		                LD      B,10 
+6243 cd 03 6a		                CALL    SENDBUF_OUT 
+6246 06 01		                LD      B,1 
+6248 cd 0e 6a		                CALL    RECVBUF_IN 
+624b 3a ff f2		                LD      A,(FLGDATA) 
+624e e6 04		                AND     FLG_RCVTIMEOUT 
+6250 c2 52 66		                JP      NZ,EXT_ERR1 
+6253 11 49 6b		                LD      DE,TBL_EXT_LIST 
+6256 06 04		                LD      B,4 
+6258 cd 45 6a		                CALL    RECVBUF_CHK 
+625b da 57 66		                JP      C,EXT_ERR2 
+625e 11 40 f2		                LD      DE,DISPBUF_TOP 
+6261 01 03 00		                LD      BC,3 
+6264 ed b0		                LDIR 
+6266 3e 3a		                LD      A,':' 
+6268 12			                LD      (DE),A 
+6269 13			                INC     DE 
+626a 3a 65 ea		                LD      A,(CRT_TEXT_COLS) 
+626d fe 48		                CP      72 
+626f 28 1a		                JR      Z,EXT_FTPLIST_040 
+6271 fe 50		                CP      80 
+6273 28 16		                JR      Z,EXT_FTPLIST_040 
+6275 06 04		                LD      B,4 
+6277			EXT_FTPLIST_010: 
+6277 7e			                LD      A,(HL) 
+6278 23			                INC     HL 
+6279 fe 2c		                CP      ',' 
+627b 28 02		                JR      Z,EXT_FTPLIST_020 
+627d 18 f8		                JR      EXT_FTPLIST_010 
+627f			EXT_FTPLIST_020: 
+627f 10 f6		                DJNZ    EXT_FTPLIST_010 
+6281			EXT_FTPLIST_030: 
+6281 7e			                LD      A,(HL) 
+6282 12			                LD      (DE),A 
+6283 23			                INC     HL 
+6284 13			                INC     DE 
+6285 fe 0d		                CP      CR 
+6287 28 15		                JR      Z,EXT_FTPLIST_070 
+6289 18 f6		                JR      EXT_FTPLIST_030 
+628b			EXT_FTPLIST_040: 
+628b 23			                INC     HL 
+628c			EXT_FTPLIST_L020: 
+628c 7e			                LD      A,(HL) 
+628d fe 2c		                CP      ',' 
+628f 28 06		                JR      Z,EXT_FTPLIST_050 
+6291 fe 0d		                CP      CR 
+6293 28 09		                JR      Z,EXT_FTPLIST_070 
+6295 18 02		                JR      EXT_FTPLIST_060 
+6297			EXT_FTPLIST_050: 
+6297 3e 20		                LD      A,' ' 
+6299			EXT_FTPLIST_060: 
+6299 12			                LD      (DE),A 
+629a 23			                INC     HL 
+629b 13			                INC     DE 
+629c 18 ee		                JR      EXT_FTPLIST_L020 
+629e			EXT_FTPLIST_070: 
+629e cd 5b 6a		                CALL    MSG_DISP 
+62a1 db 09		                IN      A,(KEYBRD9) 
+62a3 57			                LD      D,A 
+62a4 e6 01		                AND     00000001B 
+62a6 ca 82 66		                JP      Z,EXT_END 
+62a9 7a			                LD      A,D 
+62aa e6 80		                AND     10000000B 
+62ac 20 0d		                JR      NZ,EXT_FTPLIST_090 
+62ae			EXT_FTPLIST_080: 
+62ae db 09		                IN      A,(KEYBRD9) 
+62b0 57			                LD      D,A 
+62b1 e6 01		                AND     00000001B 
+62b3 ca 82 66		                JP      Z,EXT_END 
+62b6 7a			                LD      A,D 
+62b7 e6 80		                AND     10000000B 
+62b9 28 f3		                JR      Z,EXT_FTPLIST_080 
+62bb			EXT_FTPLIST_090: 
+62bb 2a 18 f2		                LD      HL,(LISTCNT) 
+62be ed 5b 1a f2	                LD      DE,(SELLISTNO) 
+62c2 13			                INC     DE 
+62c3 ed 53 1a f2	                LD      (SELLISTNO),DE 
+62c7 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
+62ca			                                        ; HL<DE : 0  1 
+62ca			                                        ; HL=DE : 1  0 
+62ca			                                        ; HL>DE : 0  0 
+62ca c2 0e 62		                JP      NZ,EXT_FTPLIST_L010 
+62cd c3 82 66		                JP      EXT_END 
+62d0			; 
+62d0			; 
+62d0			; 
+62d0			EXT_FTPGET: 
+62d0 e5			                PUSH    HL 
+62d1 cd f4 67		                CALL    INIT_SIO 
+62d4 da 66 66		                JP      C,EXT_ERR5 
+62d7 21 40 f2		                LD      HL,DISPBUF_TOP 
+62da ed 5b 1a f2	                LD      DE,(SELLISTNO) 
+62de ed 53 a8 f0	                LD      (BIN_ACC),DE 
+62e2 01 00 00		                LD      BC,0 
+62e5 cd 9f 30		                CALL    ROM_BIN2DECASC 
+62e8 21 42 6b		                LD      HL,TBL_EXT_FTPGET2 
+62eb 11 ce ed		                LD      DE,SNDBUF_TOP 
+62ee 01 07 00		                LD      BC,7 
+62f1 ed b0		                LDIR 
+62f3 21 42 f2		                LD      HL,DISPBUF_TOP + 2 
+62f6 01 03 00		                LD      BC,3 
+62f9 ed b0		                LDIR 
+62fb 21 b7 6b		                LD      HL,TBL_CRLF 
+62fe 01 02 00		                LD      BC,2 
+6301 ed b0		                LDIR 
+6303 06 0c		                LD      B,12 
+6305 cd 03 6a		                CALL    SENDBUF_OUT 
+6308 06 01		                LD      B,1 
+630a cd 0e 6a		                CALL    RECVBUF_IN 
+630d 3a ff f2		                LD      A,(FLGDATA) 
+6310 e6 04		                AND     FLG_RCVTIMEOUT 
+6312 c2 52 66		                JP      NZ,EXT_ERR1 
+6315 11 42 6b		                LD      DE,TBL_EXT_FTPGET2 
+6318 06 06		                LD      B,6 
+631a cd 45 6a		                CALL    RECVBUF_CHK 
+631d da 57 66		                JP      C,EXT_ERR2 
+6320			EXT_FTPGET_000: 
+6320 23			                INC     HL 
+6321 23			                INC     HL 
+6322 23			                INC     HL 
+6323 23			                INC     HL 
+6324 7e			                LD      A,(HL) 
+6325			; 
+6325 f5			                PUSH    AF 
+6326 23			                INC     HL 
+6327 23			                INC     HL 
+6328 06 04		                LD      B,4 
+632a 11 00 00		                LD      DE,0 
+632d			EXT_FTPGET_010: 
+632d 7e			                LD      A,(HL) 
+632e e5			                PUSH    HL 
+632f eb			                EX      DE,HL 
+6330 cd 4b 5e		                CALL    ROM_HEXASC2BIN 
+6333 eb			                EX      DE,HL 
+6334 e1			                POP     HL 
+6335 23			                INC     HL 
+6336 10 f5		                DJNZ    EXT_FTPGET_010 
+6338 ed 53 1c f2	                LD      (LOADADRS),DE 
+633c 23			                INC     HL 
+633d 06 04		                LD      B,4 
+633f 11 00 00		                LD      DE,0 
+6342			EXT_FTPGET_020: 
+6342 7e			                LD      A,(HL) 
+6343 e5			                PUSH    HL 
+6344 eb			                EX      DE,HL 
+6345 cd 4b 5e		                CALL    ROM_HEXASC2BIN 
+6348 eb			                EX      DE,HL 
+6349 e1			                POP     HL 
 634a 23			                INC     HL 
-634b 06 83		                LD      B,131 
-634d			CMD_FTPGET_L040: 
-634d cd 11 67		                CALL    IN_SIO 
-6350 4f			                LD      C,A 
-6351 3a ff f2		                LD      A,(FLGDATA) 
-6354 e6 04		                AND     FLG_RCVTIMEOUT 
-6356 c2 da 63		                JP      NZ,CMD_FTPGET_CANCEL 
-6359 3a ff f2		                LD      A,(FLGDATA) 
-635c e6 08		                AND     FLG_RCVCANCEL 
-635e c2 da 63		                JP      NZ,CMD_FTPGET_CANCEL 
-6361 79			                LD      A,C 
-6362 77			                LD      (HL),A 
-6363 23			                INC     HL 
-6364 10 e7		                DJNZ    CMD_FTPGET_L040 
-6366			; 
-6366 cd 09 67		                CALL    DISABLE_RTS 
-6369 cd 03 66		                CALL    CHKDATA 
-636c 38 1e		                JR      C,CMD_FTPGET_020 
-636e cd db 65		                CALL    CHK_MEMOVER 
-6371 38 67		                JR      C,CMD_FTPGET_CANCEL 
-6373 21 73 f2		                LD      HL,RCVBUF_DATA 
-6376 01 80 00		                LD      BC,128 
-6379 ed b0		                LDIR 
-637b cd 30 66		                CALL    DISP_PROGRESS 
-637e cd 01 67		                CALL    ENABLE_RTS 
-6381			; 
-6381 3e 06		                LD      A,ACK 
-6383 cd 78 67		                CALL    OUT_SIO         
-6386 21 23 f2		                LD      HL,CHKBLKNO 
-6389 34			                INC     (HL) 
-638a 18 9d		                JR      CMD_FTPGET_L030 
-638c			CMD_FTPGET_020: 
-638c cd 01 67		                CALL    ENABLE_RTS 
-638f 3e 15		                LD      A,NAK 
-6391 cd 78 67		                CALL    OUT_SIO         
-6394 18 93		                JR      CMD_FTPGET_L030 
-6396			CMD_FTPGET_030: 
-6396 3e 06		                LD      A,ACK 
-6398 cd 78 67		                CALL    OUT_SIO 
-639b 3e 01		                LD      A,1 
-639d cd b7 66		                CALL    TERM_SIO 
-63a0 e1			                POP     HL 
-63a1 3a ff f2		                LD      A,(FLGDATA) 
-63a4 e6 02		                AND     FLG_LOADBAS 
-63a6 20 15		                JR      NZ,CMD_FTPGET_FIXBAS 
-63a8 e5			                PUSH    HL 
-63a9 21 00 00		                LD      HL,0 
-63ac ed 5b 2e f2	                LD      DE,(EXECADRS) 
-63b0 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
-63b3			                                        ; HL<DE : 0  1 
-63b3			                                        ; HL=DE : 1  0 
-63b3			                                        ; HL>DE : 0  0 
-63b3 e1			                POP     HL 
-63b4 ca 3f 60		                JP      Z,CMD_EXIT 
-63b7 2a 16 f2		                LD      HL,(SAVESP) 
-63ba f9			                LD      SP,HL 
-63bb eb			                EX      DE,HL 
-63bc e9			                JP      (HL) 
-63bd			CMD_FTPGET_FIXBAS: 
-63bd e5			                PUSH    HL 
-63be d5			                PUSH    DE 
-63bf 2a 1c f2		                LD      HL,(LOADADRS) 
-63c2 eb			                EX      DE,HL 
-63c3 ed 52		                SBC     HL,DE 
-63c5 e5			                PUSH    HL 
-63c6 c1			                POP     BC 
-63c7 e1			                POP     HL 
-63c8 af			                XOR     A 
-63c9 ed b9		                CPDR 
-63cb 23			                INC     HL 
-63cc 23			                INC     HL 
-63cd 22 a0 ef		                LD      (VARAREA_TOP),  HL 
-63d0 22 a2 ef		                LD      (ARRAYAREA_TOP),HL 
-63d3 22 a4 ef		                LD      (FREEAREA_TOP), HL 
-63d6 e1			                POP     HL 
-63d7 c3 3f 60		                JP      CMD_EXIT 
-63da			CMD_FTPGET_CANCEL: 
-63da cd ca 5f		                CALL    ROM_DSPCRLF 
-63dd af			                XOR     A 
-63de 32 49 eb		                LD      (OUTPUT_DEVICE),A 
-63e1 3c			                INC     A 
-63e2 32 64 ea		                LD      (CURSOR_XPOS),A 
-63e5 21 fd 67		                LD      HL,ERR_MSG_000 
-63e8 cd ed 52		                CALL    ROM_MSGOUT 
-63eb cd 43 0d		                CALL    ROM_BEEP 
-63ee 3e 18		                LD      A,CAN 
-63f0 cd 78 67		                CALL    OUT_SIO 
-63f3 3e 01		                LD      A,1 
-63f5 cd b7 66		                CALL    TERM_SIO 
-63f8 e1			                POP     HL 
-63f9 c3 3f 60		                JP      CMD_EXIT 
-63fc			; 
-63fc			; 
-63fc			; 
-63fc			CMD_SNTP: 
-63fc e5			                PUSH    HL 
-63fd cd 54 66		                CALL    INIT_SIO 
-6400 21 76 68		                LD      HL,TBL_CMD_SNTP 
-6403 11 70 f2		                LD      DE,SNDBUF_TOP 
-6406 01 04 00		                LD      BC,4 
-6409 ed b0		                LDIR 
-640b 21 f2 68		                LD      HL,TBL_CRLF 
-640e 01 02 00		                LD      BC,2 
-6411 ed b0		                LDIR 
-6413 06 06		                LD      B,6 
-6415 cd 83 67		                CALL    SENDBUF_OUT 
-6418 06 01		                LD      B,1 
-641a cd 8e 67		                CALL    RECVBUF_IN 
-641d 3a ff f2		                LD      A,(FLGDATA) 
-6420 e6 04		                AND     FLG_RCVTIMEOUT 
-6422 c2 c7 64		                JP      NZ,CMD_ERR1 
-6425 11 76 68		                LD      DE,TBL_CMD_SNTP 
-6428 06 04		                LD      B,4 
-642a cd c5 67		                CALL    RECVBUF_CHK 
-642d da cc 64		                JP      C,CMD_ERR2 
-6430 11 7b ea		                LD      DE,BCD_TIME_YEAR 
-6433 23			                INC     HL 
-6434 23			                INC     HL 
-6435			CMD_SNTP_L000: 
-6435 7e			                LD      A,(HL) 
-6436 e6 0f		                AND     0FH 
-6438 cb 27		                SLA     A 
-643a cb 27		                SLA     A 
-643c cb 27		                SLA     A 
-643e cb 27		                SLA     A 
-6440 47			                LD      B,A 
-6441 23			                INC     HL 
-6442 7e			                LD      A,(HL) 
-6443 e6 0f		                AND     0FH 
-6445 b0			                OR      B 
-6446 12			                LD      (DE),A 
-6447 23			                INC     HL 
-6448 1b			                DEC     DE 
-6449 7e			                LD      A,(HL) 
-644a fe 0d		                CP      CR 
-644c 28 03		                JR      Z,CMD_SNTP_000 
-644e 23			                INC     HL 
-644f 18 e4		                JR      CMD_SNTP_L000 
-6451			CMD_SNTP_000: 
-6451 cd 63 16		                CALL    ROM_TIMEWRITE 
-6454 c3 f2 64		                JP      CMD_END 
-6457			; 
-6457			; 
-6457			; 
-6457			CMD_VER: 
-6457 e5			                PUSH    HL 
-6458 cd 54 66		                CALL    INIT_SIO 
-645b 21 80 68		                LD      HL,TBL_CMD_VER 
-645e 11 70 f2		                LD      DE,SNDBUF_TOP 
-6461 01 03 00		                LD      BC,3 
-6464 ed b0		                LDIR 
-6466 21 f2 68		                LD      HL,TBL_CRLF 
-6469 01 02 00		                LD      BC,2 
-646c ed b0		                LDIR 
-646e 06 05		                LD      B,5 
-6470 cd 83 67		                CALL    SENDBUF_OUT 
-6473 06 01		                LD      B,1 
-6475 cd 8e 67		                CALL    RECVBUF_IN 
-6478 3a ff f2		                LD      A,(FLGDATA) 
-647b e6 04		                AND     FLG_RCVTIMEOUT 
-647d 20 48		                JR      NZ,CMD_ERR1 
-647f 11 80 68		                LD      DE,TBL_CMD_VER 
-6482 06 03		                LD      B,3 
-6484 cd c5 67		                CALL    RECVBUF_CHK 
-6487 38 43		                JR      C,CMD_ERR2 
-6489 e5			                PUSH    HL 
-648a 21 cb 68		                LD      HL,TBL_ESP32_VER 
-648d 11 30 f2		                LD      DE,DISPBUF_TOP 
-6490			CMD_VER_L010: 
-6490 7e			                LD      A,(HL) 
-6491 12			                LD      (DE),A 
-6492 23			                INC     HL 
-6493 13			                INC     DE 
-6494 fe 00		                CP      0 
-6496 20 f8		                JR      NZ,CMD_VER_L010 
-6498 e1			                POP     HL 
-6499 1b			                DEC     DE 
-649a			CMD_VER_L020: 
-649a 7e			                LD      A,(HL) 
-649b fe 2c		                CP      ',' 
-649d 28 06		                JR      Z,CMD_VER_010 
-649f fe 0d		                CP      CR 
-64a1 28 09		                JR      Z,CMD_VER_030 
-64a3 18 02		                JR      CMD_VER_020 
-64a5			CMD_VER_010: 
-64a5 3e 2e		                LD      A,'.' 
-64a7			CMD_VER_020: 
-64a7 12			                LD      (DE),A 
-64a8 23			                INC     HL 
-64a9 13			                INC     DE 
-64aa 18 ee		                JR      CMD_VER_L020 
-64ac			CMD_VER_030: 
-64ac cd db 67		                CALL    MSG_DISP 
-64af 21 dc 68		                LD      HL,TBL_SIO_VER 
-64b2 11 30 f2		                LD      DE,DISPBUF_TOP 
-64b5			CMD_VER_L030: 
-64b5 7e			                LD      A,(HL) 
-64b6 12			                LD      (DE),A 
-64b7 23			                INC     HL 
-64b8 13			                INC     DE 
-64b9 fe 00		                CP      0 
-64bb 20 f8		                JR      NZ,CMD_VER_L030 
-64bd cd db 67		                CALL    MSG_DISP 
-64c0 18 30		                JR      CMD_END 
-64c2			; 
-64c2			; 
-64c2			; 
-64c2			CMD_ERR0: 
-64c2 21 fd 67		                LD      HL,ERR_MSG_000 
-64c5 18 12		                JR      CMD_ERR 
-64c7			CMD_ERR1: 
-64c7 21 0b 68		                LD      HL,ERR_MSG_001 
-64ca 18 0d		                JR      CMD_ERR 
-64cc			CMD_ERR2: 
-64cc 21 1c 68		                LD      HL,ERR_MSG_002 
-64cf 18 08		                JR      CMD_ERR 
-64d1			CMD_ERR3: 
-64d1 21 36 68		                LD      HL,ERR_MSG_003 
-64d4 18 03		                JR      CMD_ERR 
-64d6			CMD_ERR4: 
-64d6 21 44 68		                LD      HL,ERR_MSG_004 
-64d9			CMD_ERR: 
-64d9 af			                XOR     A 
-64da 32 49 eb		                LD      (OUTPUT_DEVICE),A 
-64dd 3c			                INC     A 
-64de 32 64 ea		                LD      (CURSOR_XPOS),A 
-64e1 cd ed 52		                CALL    ROM_MSGOUT 
-64e4 cd ca 5f		                CALL    ROM_DSPCRLF 
-64e7 cd 43 0d		                CALL    ROM_BEEP 
-64ea af			                XOR     A 
-64eb cd b7 66		                CALL    TERM_SIO 
-64ee e1			                POP     HL 
-64ef c3 58 60		                JP      CMD_MYERR_EXIT 
-64f2			CMD_END: 
-64f2 af			                XOR     A 
-64f3 cd b7 66		                CALL    TERM_SIO 
-64f6 e1			                POP     HL 
-64f7 c3 3f 60		                JP      CMD_EXIT 
-64fa			; 
-64fa			; 
-64fa			; 
-64fa			PARSER_CMDPARAM: 
-64fa e5			                PUSH    HL 
-64fb 21 00 00		                LD      HL,0 
-64fe 22 1c f2		                LD      (LOADADRS),HL 
-6501 22 2e f2		                LD      (EXECADRS),HL 
-6504 af			                XOR     A 
-6505 32 22 f2		                LD      (CMDNO),A 
-6508 3a ff f2		                LD      A,(FLGDATA) 
-650b e6 fd		                AND     ~FLG_LOADBAS 
-650d e6 fb		                AND     ~FLG_RCVTIMEOUT 
-650f 32 ff f2		                LD      (FLGDATA),A 
-6512 e1			                POP     HL 
-6513 11 59 68		                LD      DE,TBL_CMD 
-6516			PARSER_CMDPARAM_000: 
-6516 1a			                LD      A,(DE) 
-6517 fe 00		                CP      0 
-6519 ca ca 65		                JP      Z,SETCFRET 
-651c e5			                PUSH    HL 
-651d			PARSER_CMDPARAM_010: 
-651d be			                CP      (HL) 
-651e 20 09		                JR      NZ,PARSER_CMDPARAM_020 
-6520 23			                INC     HL 
-6521 13			                INC     DE 
-6522 1a			                LD      A,(DE) 
-6523 fe 00		                CP      0 
-6525 28 11		                JR      Z,PARSER_CMDPARAM_040 
-6527 18 f4		                JR      PARSER_CMDPARAM_010 
-6529			PARSER_CMDPARAM_020: 
-6529 e1			                POP     HL 
-652a			PARSER_CMDPARAM_030: 
-652a 13			                INC     DE 
-652b 1a			                LD      A,(DE) 
-652c fe 00		                CP      0 
-652e 20 fa		                JR      NZ,PARSER_CMDPARAM_030 
-6530 13			                INC     DE 
-6531 13			                INC     DE 
-6532 13			                INC     DE 
-6533 13			                INC     DE 
-6534 13			                INC     DE 
-6535 13			                INC     DE 
-6536 18 de		                JR      PARSER_CMDPARAM_000 
-6538			PARSER_CMDPARAM_040: 
-6538 2b			                DEC     HL 
-6539 13			                INC     DE 
-653a 1a			                LD      A,(DE) 
-653b 32 22 f2		                LD      (CMDNO),A 
-653e 13			                INC     DE 
-653f e5			                PUSH    HL 
-6540 1a			                LD      A,(DE) 
-6541 6f			                LD      L,A 
-6542 13			                INC     DE 
-6543 1a			                LD      A,(DE) 
-6544 67			                LD      H,A 
-6545 e5			                PUSH    HL 
-6546 dd e1		                POP     IX 
-6548 13			                INC     DE 
-6549 1a			                LD      A,(DE) 
-654a 6f			                LD      L,A 
-654b 13			                INC     DE 
-654c 1a			                LD      A,(DE) 
-654d 67			                LD      H,A 
-654e e5			                PUSH    HL 
-654f fd e1		                POP     IY 
-6551 e1			                POP     HL 
-6552 d1			                POP     DE 
-6553 dd e9		                JP      (IX) 
-6555			PARSER_CMD_BME: 
-6555			PARSER_CMD_FTPLIST: 
-6555			PARSER_CMD_SNTP: 
-6555			PARSER_CMD_VER: 
-6555 23			                INC     HL 
-6556 7e			                LD      A,(HL) 
-6557 fe 00		                CP      0 
-6559 28 6c		                JR      Z,CLRCFRET 
-655b fe 3a		                CP      ':' 
-655d 28 68		                JR      Z,CLRCFRET 
-655f 18 69		                JR      SETCFRET 
-6561			PARSER_CMD_FTPGET: 
-6561 cd b3 65		                CALL    PARSER_SKIP 
-6564 fe 0f		                CP      0FH             ; ID CODE 0FH : 1 byte hex 
-6566 28 17		                JR      Z,PARSER_CMD_FTPGET_010 
-6568 fe 11		                CP      11H             ; ID CODE 11H -> 0, 12H -> 1, ... 19H -> 8, 1AH -> 9 
-656a 28 0c		                JR      Z,PARSER_CMD_FTPGET_000 
-656c fe 1a		                CP      1AH 
-656e 38 08		                JR      C,PARSER_CMD_FTPGET_000 
-6570 28 06		                JR      Z,PARSER_CMD_FTPGET_000 
-6572 fe 1c		                CP      1CH             ; ID CODE 0CH : 2 byte hex 
-6574 28 0f		                JR      Z,PARSER_CMD_FTPGET_020 
-6576 18 52		                JR      SETCFRET 
-6578			PARSER_CMD_FTPGET_000: 
-6578 d6 11		                SUB     A,11H 
-657a 5f			                LD      E,A 
-657b af			                XOR     A 
-657c 57			                LD      D,A 
-657d 18 0a		                JR      PARSER_CMD_FTPGET_030 
-657f			PARSER_CMD_FTPGET_010: 
-657f 23			                INC     HL 
-6580 5e			                LD      E,(HL) 
-6581 af			                XOR     A 
-6582 57			                LD      D,A 
-6583 18 04		                JR      PARSER_CMD_FTPGET_030 
-6585			PARSER_CMD_FTPGET_020: 
-6585 23			                INC     HL 
-6586 5e			                LD      E,(HL) 
-6587 23			                INC     HL 
-6588 56			                LD      D,(HL) 
-6589			PARSER_CMD_FTPGET_030: 
-6589 ed 53 1a f2	                LD      (SELLISTNO),DE 
-658d 23			                INC     HL 
-658e 7e			                LD      A,(HL) 
-658f fe 00		                CP      0 
-6591 28 34		                JR      Z,CLRCFRET 
-6593 fe 3a		                CP      ':' 
-6595 28 30		                JR      Z,CLRCFRET 
-6597 2b			                DEC     HL 
-6598 cd b3 65		                CALL    PARSER_SKIP 
-659b fe 0c		                CP      0CH             ; ID CODE "&H" 
-659d 20 2b		                JR      NZ,SETCFRET 
-659f 23			                INC     HL 
-65a0 5e			                LD      E,(HL) 
-65a1 23			                INC     HL 
-65a2 56			                LD      D,(HL) 
-65a3 ed 53 2e f2	                LD      (EXECADRS),DE 
-65a7 23			                INC     HL 
-65a8 7e			                LD      A,(HL) 
-65a9 fe 00		                CP      0 
-65ab 28 1a		                JR      Z,CLRCFRET 
-65ad fe 3a		                CP      ':' 
-65af 28 16		                JR      Z,CLRCFRET 
-65b1 18 17		                JR      SETCFRET 
-65b3			PARSER_SKIP: 
-65b3 23			                INC     HL 
-65b4 7e			                LD      A,(HL) 
-65b5 fe 20		                CP      ' ' 
-65b7 28 fa		                JR      Z,PARSER_SKIP 
-65b9 fe 2c		                CP      ',' 
-65bb 28 03		                JR      Z,PARSER_SKIP_010 
-65bd d1			                POP     DE 
-65be 18 0a		                JR      SETCFRET 
-65c0			PARSER_SKIP_010: 
-65c0 23			                INC     HL 
-65c1 7e			                LD      A,(HL) 
-65c2 fe 20		                CP      ' ' 
-65c4 28 fa		                JR      Z,PARSER_SKIP_010 
-65c6 c9			                RET 
-65c7			CLRCFRET: 
-65c7 37			                SCF 
-65c8 3f			                CCF 
-65c9 c9			                RET 
-65ca			SETCFRET: 
-65ca 37			                SCF 
-65cb c9			                RET 
-65cc			; 
-65cc			; 
-65cc			; 
-65cc			CLR_RCVBUF: 
-65cc 21 70 f2		                LD      HL,RCVBUF_TOP 
-65cf f5			                PUSH    AF 
-65d0 e5			                PUSH    HL 
-65d1 06 84		                LD      B,RCVBUF_BOTTOM - RCVBUF_TOP + 1 
-65d3 af			                XOR     A 
-65d4			CLR_RCVBUF_L010: 
-65d4 77			                LD      (HL),A 
-65d5 23			                INC     HL 
-65d6 10 fc		                DJNZ    CLR_RCVBUF_L010 
-65d8 e1			                POP     HL 
-65d9 f1			                POP     AF 
-65da c9			                RET 
-65db			; 
-65db			; 
-65db			; 
-65db			CHK_MEMOVER: 
-65db 01 80 00		                LD      BC,128 
-65de d5			                PUSH    DE 
-65df 21 00 60		                LD      HL,_PROG_TOP 
-65e2 11 00 80		                LD      DE,PC8001RAM_TOP 
-65e5 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
-65e8			                                        ; HL<DE : 0  1 
-65e8			                                        ; HL=DE : 1  0 
-65e8			                                        ; HL>DE : 0  0 
-65e8 d1			                POP     DE 
-65e9 38 0c		                JR      C,CHK_MEMOVER_010 
-65eb d5			                PUSH    DE 
-65ec eb			                EX      DE,HL 
-65ed 09			                ADD     HL,BC 
-65ee eb			                EX      DE,HL 
-65ef 21 00 60		                LD      HL,_PROG_TOP 
-65f2 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
-65f5			                                        ; HL<DE : 0  1 
-65f5			                                        ; HL=DE : 1  0 
-65f5			                                        ; HL>DE : 0  0 
-65f5 d1			                POP     DE 
-65f6 d8			                RET     C 
-65f7			CHK_MEMOVER_010: 
-65f7 d5			                PUSH    DE 
-65f8 eb			                EX      DE,HL 
-65f9 09			                ADD     HL,BC 
-65fa eb			                EX      DE,HL 
-65fb 21 00 ea		                LD      HL,ROMBAS_WORKTOP 
-65fe cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
-6601			                                        ; HL<DE : 0  1 
-6601			                                        ; HL=DE : 1  0 
-6601			                                        ; HL>DE : 0  0 
-6601 d1			                POP     DE 
-6602 c9			                RET 
-6603			; 
-6603			; 
-6603			; 
-6603			CHKDATA: 
-6603 21 70 f2		                LD      HL,RCVBUF_TOP 
-6606 7e			                LD      A,(HL) 
-6607 fe 01		                CP      SOH 
-6609 20 bf		                JR      NZ,SETCFRET 
-660b 4f			                LD      C,A 
-660c 23			                INC     HL 
-660d 3a 23 f2		                LD      A,(CHKBLKNO) 
-6610 be			                CP      (HL) 
-6611 20 b7		                JR      NZ,SETCFRET 
-6613 81			                ADD     A,C 
-6614 4f			                LD      C,A 
-6615 23			                INC     HL 
-6616 3a 23 f2		                LD      A,(CHKBLKNO) 
-6619 2f			                CPL 
-661a be			                CP      (HL) 
-661b 20 ad		                JR      NZ,SETCFRET 
-661d 81			                ADD     A,C 
-661e 4f			                LD      C,A 
-661f 23			                INC     HL 
-6620 06 80		                LD      B,128 
-6622			CHKDATA_L010: 
-6622 7e			                LD      A,(HL) 
-6623 81			                ADD     A,C 
-6624 4f			                LD      C,A 
-6625 23			                INC     HL 
-6626 10 fa		                DJNZ    CHKDATA_L010 
-6628 79			                LD      A,C 
-6629 be			                CP      (HL) 
-662a c2 ca 65		                JP      NZ,SETCFRET 
-662d c3 c7 65		                JP      CLRCFRET 
-6630			; 
-6630			; 
-6630			; 
-6630			DISP_PROGRESS: 
-6630 d5			                PUSH    DE 
-6631 e5			                PUSH    HL 
-6632 3e 01		                LD      A,1 
-6634 32 64 ea		                LD      (CURSOR_XPOS),A 
-6637 3e 5b		                LD      A,'[' 
-6639 cd 57 02		                CALL    ROM_DSPCHR 
-663c 2a 1c f2		                LD      HL,(LOADADRS) 
-663f cd c0 5e		                CALL    ROM_DSPHEX4 
-6642 3e 2d		                LD      A,'-' 
-6644 cd 57 02		                CALL    ROM_DSPCHR 
-6647 eb			                EX      DE,HL 
-6648 2b			                DEC     HL 
-6649 cd c0 5e		                CALL    ROM_DSPHEX4 
-664c 3e 5d		                LD      A,']' 
-664e cd 57 02		                CALL    ROM_DSPCHR 
-6651 e1			                POP     HL 
-6652 d1			                POP     DE 
-6653 c9			                RET 
-6654			; 
-6654			; 
-6654			; 
-6654			INIT_SIO: 
-6654 cd d9 66		                CALL    ENABLE_SIO 
-6657 af			                XOR     A               ; DUMMY OUT 
-6658 d3 21		                OUT     (USARTCW),A 
-665a d3 21		                OUT     (USARTCW),A 
-665c d3 21		                OUT     (USARTCW),A 
-665e 3e 40		                LD      A,01000000B     ; SOFT RESET 
-6660 d3 21		                OUT     (USARTCW),A 
-6662 3e 4e		                LD      A,01001110B     ; MODE SETUP                    : 8N11 
-6664			                                        ; BAUD RATE FACTOR              : 16X 
-6664			                                        ; CHARACTER LENGTH              : 8BITS 
-6664			                                        ; PARITY ENABLE                 : DISABLE 
-6664			                                        ; EVEN PARITY GENARATION/CHECK  : ODD 
-6664			                                        ; NUMBER OF STOP BITS           : 1 BIT 
-6664 d3 21		                OUT     (USARTCW),A 
-6666 32 20 f2		                LD      (MODEWORD),A 
-6669 3e 05		                LD      A,00000101B     ; COMMAND SETUP  TRANSMIT ENABLE 
-666b			                                        ;                DATA TERMINAL READY : FALSE 
-666b			                                        ;                RECEIVE ENABLE 
-666b			                                        ;                ERROR RESET         : FALSE 
-666b			                                        ;                REQUEST TO SEND     : FALSE 
-666b d3 21		                OUT     (USARTCW),A 
-666d 32 21 f2		                LD      (CTLWORD),A 
-6670 cd f1 66		                CALL    ENABLE_DTR 
-6673 cd 01 67		                CALL    ENABLE_RTS 
-6676			INIT_SIO_000: 
-6676 db 21		                IN      A,(USARTCW)     ; ESP32-WROOM-32 -> 8251 power-on receive dust removal support 
-6678 57			                LD      D,A 
-6679 e6 38		                AND     00111000B 
-667b 20 31		                JR      NZ,INIT_SIO_010 
-667d 7a			                LD      A,D 
-667e e6 02		                AND     00000010B 
-6680 28 04		                JR      Z,INIT_SIO_020 
-6682 db 20		                IN      A,(USARTDW) 
-6684 18 f0		                JR      INIT_SIO_000 
-6686			INIT_SIO_020: 
-6686 3a ff f2		                LD      A,(FLGDATA) 
-6689 e6 01		                AND     FLG_FIRSTSEND 
-668b 20 18		                JR      NZ,INIT_SIO_030 
-668d 11 70 f2		                LD      DE,SNDBUF_TOP   ; 8251 -> ESP32-WROOM-32 power-on send dust removal support 
-6690 21 f2 68		                LD      HL,TBL_CRLF 
-6693 01 02 00		                LD      BC,2 
-6696 ed b0		                LDIR 
-6698 06 02		                LD      B,2 
-669a cd 83 67		                CALL    SENDBUF_OUT 
-669d 3a ff f2		                LD      A,(FLGDATA) 
-66a0 f6 01		                OR      FLG_FIRSTSEND 
-66a2 32 ff f2		                LD      (FLGDATA),A 
-66a5			INIT_SIO_030: 
-66a5 3a ff f2		                LD      A,(FLGDATA) 
-66a8 e6 ef		                AND     ~FLG_ENABLESTOP 
-66aa 32 ff f2		                LD      (FLGDATA),A 
-66ad c9			                RET 
-66ae			INIT_SIO_010: 
-66ae 3a 21 f2		                LD      A,(CTLWORD) 
-66b1 f6 10		                OR      00010000B 
-66b3 d3 21		                OUT     (USARTCW),A 
-66b5 18 bf		                JR      INIT_SIO_000 
-66b7			; 
-66b7			; A :  0 no wait term sio 
-66b7			;   : !0 1sec wait term sio 
-66b7			; 
-66b7			TERM_SIO: 
-66b7 d5			                PUSH    DE 
-66b8 fe 00		                CP      0 
-66ba 28 12		                JR      Z,TERM_SIO_020 
-66bc cd 02 16		                CALL    ROM_TIMEREAD 
-66bf 3a 76 ea		                LD      A,(BCD_TIME_SEC) 
-66c2 57			                LD      D,A 
-66c3			TERM_SIO_010: 
-66c3 d5			                PUSH    DE 
-66c4 cd 02 16		                CALL    ROM_TIMEREAD 
-66c7 d1			                POP     DE 
-66c8 3a 76 ea		                LD      A,(BCD_TIME_SEC) 
-66cb ba			                CP      D 
-66cc 28 f5		                JR      Z,TERM_SIO_010 
-66ce			TERM_SIO_020: 
-66ce cd 09 67		                CALL    DISABLE_RTS 
-66d1 cd f9 66		                CALL    DISABLE_DTR 
-66d4 cd e6 66		                CALL    DISABLE_SIO 
-66d7 d1			                POP     DE 
-66d8 c9			                RET 
-66d9			; 
-66d9			; 
-66d9			; 
-66d9			ENABLE_SIO: 
-66d9 3a 66 ea		                LD      A,(CTL1_OUTDATA) 
-66dc e6 cf		                AND     11001111B       ; BS2,BS1 CLR 
-66de f6 20		                OR      00100000B       ; BS2 ON 
-66e0 d3 30		                OUT     (CONTROL1),A 
-66e2 32 66 ea		                LD      (CTL1_OUTDATA),A 
-66e5 c9			                RET 
-66e6			; 
-66e6			; 
-66e6			; 
-66e6			DISABLE_SIO: 
-66e6 3a 66 ea		                LD      A,(CTL1_OUTDATA) 
-66e9 e6 cf		                AND     11001111B       ; BS2,BS1 CLR 
-66eb d3 30		                OUT     (CONTROL1),A 
-66ed 32 66 ea		                LD      (CTL1_OUTDATA),A 
-66f0 c9			                RET 
-66f1			; 
-66f1			; 
-66f1			; 
-66f1			ENABLE_DTR: 
-66f1 3a 21 f2		                LD      A,(CTLWORD) 
-66f4 f6 02		                OR      00000010B       ; DATA TERMINAL READY : TRUE 
-66f6 d3 21		                OUT     (USARTCW),A 
-66f8 c9			                RET 
-66f9			; 
-66f9			; 
-66f9			; 
-66f9			DISABLE_DTR: 
-66f9 3a 21 f2		                LD      A,(CTLWORD) 
-66fc e6 fd		                AND     11111101B       ; DATA TERMINAL READY : FALSE 
-66fe d3 21		                OUT     (USARTCW),A 
-6700 c9			                RET 
-6701			; 
-6701			; 
-6701			; 
-6701			ENABLE_RTS: 
-6701 3a 21 f2		                LD      A,(CTLWORD) 
-6704 f6 20		                OR      00100000B       ; REQUEST TO SEND : TRUE 
-6706 d3 21		                OUT     (USARTCW),A 
-6708 c9			                RET 
-6709			; 
-6709			; 
-6709			; 
-6709			DISABLE_RTS: 
-6709 3a 21 f2		                LD      A,(CTLWORD) 
-670c e6 df		                AND     11011111B       ; REQUEST TO SEND : FALSE 
-670e d3 21		                OUT     (USARTCW),A 
-6710 c9			                RET 
-6711			; 
-6711			; 
-6711			; 
-6711			IN_SIO: 
-6711 3a ff f2		                LD      A,(FLGDATA) 
-6714 e6 fb		                AND     ~FLG_RCVTIMEOUT 
-6716 e6 f7		                AND     ~FLG_RCVCANCEL 
-6718 32 ff f2		                LD      (FLGDATA),A 
-671b c5			                PUSH    BC 
-671c d5			                PUSH    DE 
-671d e5			                PUSH    HL 
-671e 21 03 00		                LD      HL,3            ; 5000msec Timer 
-6721 01 00 0a		                LD      BC,0A00H 
-6724			IN_SIO_010: 
-6724 3a ff f2		                LD      A,(FLGDATA) 
-6727 e6 10		                AND     FLG_ENABLESTOP 
-6729 28 06		                JR      Z,IN_SIO_015 
-672b db 09		                IN      A,(KEYBRD9) 
-672d e6 01		                AND     00000001B 
-672f 28 2d		                JR      Z,IN_SIO_070 
-6731			IN_SIO_015: 
-6731 db 21		                IN      A,(USARTCW) 
-6733 57			                LD      D,A 
-6734 e6 38		                AND     00111000B 
-6736 20 37		                JR      NZ,IN_SIO_050 
-6738 7a			                LD      A,D 
-6739 e6 02		                AND     00000010B 
-673b 20 2c		                JR      NZ,IN_SIO_030 
-673d			IN_SIO_020: 
-673d 0b			                DEC     BC 
-673e 79			                LD      A,C 
+634b 10 f5		                DJNZ    EXT_FTPGET_020 
+634d ed 53 20 f2	                LD      (LOAD_ENDADRS),DE 
+6351 e5			                PUSH    HL 
+6352 eb			                EX      DE,HL 
+6353 ed 5b 1c f2	                LD      DE,(LOADADRS) 
+6357 cd 5d 67		                CALL    CLRCFRET 
+635a ed 52		                SBC     HL,DE 
+635c 23			                INC     HL         
+635d 22 22 f2		                LD      (LOADSIZE),HL 
+6360 e1			                POP     HL 
+6361 f1			                POP     AF 
+6362			; 
+6362 e6 0f		                AND     0FH 
+6364 fe 00		                CP      0               ; ERROR 
+6366 ca 5c 66		                JP      Z,EXT_ERR3 
+6369 fe 01		                CP      1               ; ANY BIN 
+636b ca 79 63		                JP      Z,EXT_FTPGET_100 
+636e fe 02		                CP      2               ; BASIC BIN 
+6370 28 25		                JR      Z,EXT_FTPGET_110 
+6372 fe 03		                CP      3               ; Z80 BIN 
+6374 28 31		                JR      Z,EXT_FTPGET_200 
+6376 c3 57 66		                JP      EXT_ERR2 
+6379			EXT_FTPGET_100: 
+6379 ed 5b 1e f2	                LD      DE,(EXECADRS) 
+637d e5			                PUSH    HL 
+637e 21 00 00		                LD      HL,0 
+6381 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
+6384			                                        ; HL<DE : 0  1 
+6384			                                        ; HL=DE : 1  0 
+6384			                                        ; HL>DE : 0  0 
+6384 e1			                POP     HL 
+6385 ca 61 66		                JP      Z,EXT_ERR4 
+6388 ed 53 1c f2	                LD      (LOADADRS),DE 
+638c d5			                PUSH    DE 
+638d 11 00 00		                LD      DE,0 
+6390 ed 53 1e f2	                LD      (EXECADRS),DE 
+6394 d1			                POP     DE 
+6395 18 10		                JR      EXT_FTPGET_200 
+6397			EXT_FTPGET_110: 
+6397 3a ff f2		                LD      A,(FLGDATA) 
+639a f6 02		                OR      FLG_LOADBAS 
+639c 32 ff f2		                LD      (FLGDATA),A 
+639f ed 5b 54 eb	                LD      DE,(BASAREA_TOP) 
+63a3 ed 53 1c f2	                LD      (LOADADRS),DE 
+63a7			EXT_FTPGET_200: 
+63a7 3a ff f2		                LD      A,(FLGDATA) 
+63aa f6 10		                OR      FLG_ENABLESTOP 
+63ac 32 ff f2		                LD      (FLGDATA),A 
+63af 3e 01		                LD      A,1 
+63b1 32 2d f2		                LD      (CHKBLKNO),A 
+63b4			EXT_FTPGET_L010: 
+63b4 af			                XOR     A 
+63b5 32 2f f2		                LD      (RCVBUF_RPOS),A 
+63b8 32 30 f2		                LD      (RCVBUF_WPOS),A 
+63bb 3e 15		                LD      A,NAK 
+63bd cd f8 69		                CALL    OUT_SIO 
+63c0			EXT_FTPGET_L020: 
+63c0 cd 67 69		                CALL    IN_SIO 
+63c3 fe 04		                CP      EOT 
+63c5 ca 6c 64		                JP      Z,EXT_FTPGET_310 
+63c8 fe 01		                CP      SOH 
+63ca 28 2f		                JR      Z,EXT_FTPGET_210 
+63cc 3a ff f2		                LD      A,(FLGDATA) 
+63cf e6 04		                AND     FLG_RCVTIMEOUT 
+63d1 20 e1		                JR      NZ,EXT_FTPGET_L010 
+63d3 3a ff f2		                LD      A,(FLGDATA) 
+63d6 e6 08		                AND     FLG_RCVCANCEL 
+63d8 c2 ad 64		                JP      NZ,EXT_FTPGET_CANCEL 
+63db 18 e3		                JR      EXT_FTPGET_L020 
+63dd			EXT_FTPGET_L030: 
+63dd cd 67 69		                CALL    IN_SIO 
+63e0 fe 04		                CP      EOT 
+63e2 ca 6c 64		                JP      Z,EXT_FTPGET_310 
+63e5 fe 01		                CP      SOH 
+63e7 28 12		                JR      Z,EXT_FTPGET_210 
+63e9 3a ff f2		                LD      A,(FLGDATA) 
+63ec e6 04		                AND     FLG_RCVTIMEOUT 
+63ee c2 ad 64		                JP      NZ,EXT_FTPGET_CANCEL 
+63f1 3a ff f2		                LD      A,(FLGDATA) 
+63f4 e6 08		                AND     FLG_RCVCANCEL 
+63f6 c2 ad 64		                JP      NZ,EXT_FTPGET_CANCEL 
+63f9 18 e2		                JR      EXT_FTPGET_L030 
+63fb			EXT_FTPGET_210: 
+63fb cd 62 67		                CALL    CLR_RCVBUF 
+63fe 77			                LD      (HL),A 
+63ff 23			                INC     HL 
+6400 06 83		                LD      B,131 
+6402			EXT_FTPGET_L040: 
+6402 cd 67 69		                CALL    IN_SIO 
+6405 4f			                LD      C,A 
+6406 3a ff f2		                LD      A,(FLGDATA) 
+6409 e6 04		                AND     FLG_RCVTIMEOUT 
+640b c2 ad 64		                JP      NZ,EXT_FTPGET_CANCEL 
+640e 3a ff f2		                LD      A,(FLGDATA) 
+6411 e6 08		                AND     FLG_RCVCANCEL 
+6413 c2 ad 64		                JP      NZ,EXT_FTPGET_CANCEL 
+6416 79			                LD      A,C 
+6417 77			                LD      (HL),A 
+6418 23			                INC     HL 
+6419 10 e7		                DJNZ    EXT_FTPGET_L040 
+641b			; 
+641b af			                XOR     A 
+641c 32 2f f2		                LD      (RCVBUF_RPOS),A 
+641f 32 30 f2		                LD      (RCVBUF_WPOS),A 
+6422 cd 5f 69		                CALL    DISABLE_RTS 
+6425 cd a1 67		                CALL    CHK_RCVDATA 
+6428 38 37		                JR      C,EXT_FTPGET_300 
+642a d5			                PUSH    DE 
+642b 2a 22 f2		                LD      HL,(LOADSIZE) 
+642e 11 80 00		                LD      DE,128 
+6431 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
+6434			                                        ; HL<DE : 0  1 
+6434			                                        ; HL=DE : 1  0 
+6434			                                        ; HL>DE : 0  0 
+6434 38 02		                JR      C,EXT_FTPGET_220 
+6436 d5			                PUSH    DE 
+6437 e1			                POP     HL 
+6438			EXT_FTPGET_220: 
+6438 e5			                PUSH    HL 
+6439 c1			                POP     BC 
+643a d1			                POP     DE 
+643b cd 71 67		                CALL    CHK_MEMOVER 
+643e 38 6d		                JR      C,EXT_FTPGET_CANCEL 
+6440 c5			                PUSH    BC 
+6441 21 d1 ed		                LD      HL,RCVBUF_DATA 
+6444 ed b0		                LDIR 
+6446 c1			                POP     BC 
+6447 cd ce 67		                CALL    DISP_PROGRESS 
+644a 2a 22 f2		                LD      HL,(LOADSIZE) 
+644d ed 42		                SBC     HL,BC 
+644f 22 22 f2		                LD      (LOADSIZE),HL 
+6452 cd 57 69		                CALL    ENABLE_RTS 
+6455			; 
+6455 3e 06		                LD      A,ACK 
+6457 cd f8 69		                CALL    OUT_SIO         
+645a 21 2d f2		                LD      HL,CHKBLKNO 
+645d 34			                INC     (HL) 
+645e c3 dd 63		                JP      EXT_FTPGET_L030 
+6461			EXT_FTPGET_300: 
+6461 cd 57 69		                CALL    ENABLE_RTS 
+6464 3e 15		                LD      A,NAK 
+6466 cd f8 69		                CALL    OUT_SIO         
+6469 c3 dd 63		                JP      EXT_FTPGET_L030 
+646c			EXT_FTPGET_310: 
+646c 3e 06		                LD      A,ACK 
+646e cd f8 69		                CALL    OUT_SIO 
+6471 3e 01		                LD      A,1 
+6473 cd af 68		                CALL    TERM_SIO 
+6476 e1			                POP     HL 
+6477 3a ff f2		                LD      A,(FLGDATA) 
+647a e6 02		                AND     FLG_LOADBAS 
+647c 20 12		                JR      NZ,EXT_FTPGET_FIXBAS 
+647e e5			                PUSH    HL 
+647f 21 00 00		                LD      HL,0 
+6482 ed 5b 1e f2	                LD      DE,(EXECADRS) 
+6486 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
+6489			                                        ; HL<DE : 0  1 
+6489			                                        ; HL=DE : 1  0 
+6489			                                        ; HL>DE : 0  0 
+6489 e1			                POP     HL 
+648a ca 3a 60		                JP      Z,EXT_EXIT 
+648d c3 45 60		                JP      EXT_DLEXEC_EXIT 
+6490			EXT_FTPGET_FIXBAS: 
+6490 e5			                PUSH    HL 
+6491 d5			                PUSH    DE 
+6492 2a 1c f2		                LD      HL,(LOADADRS) 
+6495 eb			                EX      DE,HL 
+6496 ed 52		                SBC     HL,DE 
+6498 e5			                PUSH    HL 
+6499 c1			                POP     BC 
+649a e1			                POP     HL 
+649b af			                XOR     A 
+649c ed b9		                CPDR 
+649e 23			                INC     HL 
+649f 23			                INC     HL 
+64a0 22 a0 ef		                LD      (VARAREA_TOP),  HL 
+64a3 22 a2 ef		                LD      (ARRAYAREA_TOP),HL 
+64a6 22 a4 ef		                LD      (FREEAREA_TOP), HL 
+64a9 e1			                POP     HL 
+64aa c3 3a 60		                JP      EXT_EXIT 
+64ad			EXT_FTPGET_CANCEL: 
+64ad cd 57 69		                CALL    ENABLE_RTS 
+64b0 3e 18		                LD      A,CAN 
+64b2 cd f8 69		                CALL    OUT_SIO 
+64b5 cd ca 5f		                CALL    ROM_DSPCRLF 
+64b8 af			                XOR     A 
+64b9 32 49 eb		                LD      (OUTPUT_DEVICE),A 
+64bc 3c			                INC     A 
+64bd 32 64 ea		                LD      (CURSOR_XPOS),A 
+64c0 21 7d 6a		                LD      HL,ERR_MSG_000 
+64c3 cd ed 52		                CALL    ROM_MSGOUT 
+64c6 cd 43 0d		                CALL    ROM_BEEP 
+64c9 af			                XOR     A 
+64ca cd af 68		                CALL    TERM_SIO 
+64cd e1			                POP     HL 
+64ce c3 3d 60		                JP      EXT_MYERR_EXIT 
+64d1			; 
+64d1			; 
+64d1			; 
+64d1			EXT_SNTP: 
+64d1 e5			                PUSH    HL 
+64d2 cd f4 67		                CALL    INIT_SIO 
+64d5 da 66 66		                JP      C,EXT_ERR5 
+64d8 21 13 6b		                LD      HL,TBL_EXT_SNTP 
+64db 11 ce ed		                LD      DE,SNDBUF_TOP 
+64de 01 04 00		                LD      BC,4 
+64e1 ed b0		                LDIR 
+64e3 21 b7 6b		                LD      HL,TBL_CRLF 
+64e6 01 02 00		                LD      BC,2 
+64e9 ed b0		                LDIR 
+64eb 06 06		                LD      B,6 
+64ed cd 03 6a		                CALL    SENDBUF_OUT 
+64f0 06 01		                LD      B,1 
+64f2 cd 0e 6a		                CALL    RECVBUF_IN 
+64f5 3a ff f2		                LD      A,(FLGDATA) 
+64f8 e6 04		                AND     FLG_RCVTIMEOUT 
+64fa c2 52 66		                JP      NZ,EXT_ERR1 
+64fd 11 13 6b		                LD      DE,TBL_EXT_SNTP 
+6500 06 04		                LD      B,4 
+6502 cd 45 6a		                CALL    RECVBUF_CHK 
+6505 da 57 66		                JP      C,EXT_ERR2 
+6508 11 7b ea		                LD      DE,BCD_TIME_YEAR 
+650b 0e 00		                LD      C,0 
+650d 23			                INC     HL 
+650e 23			                INC     HL 
+650f			EXT_SNTP_L000: 
+650f 7e			                LD      A,(HL)          ; ASCII DECIMAL -> BCD 
+6510 e6 0f		                AND     0FH 
+6512 cb 27		                SLA     A 
+6514 cb 27		                SLA     A 
+6516 cb 27		                SLA     A 
+6518 cb 27		                SLA     A 
+651a 47			                LD      B,A 
+651b 23			                INC     HL 
+651c 7e			                LD      A,(HL) 
+651d e6 0f		                AND     0FH 
+651f b0			                OR      B 
+6520 47			                LD      B,A 
+6521 79			                LD      A,C 
+6522 fe 01		                CP      1               ; MONTH NOT BCD         
+6524 20 19		                JR      NZ,EXT_SNTP_000 
+6526 d5			                PUSH    DE              ; BCD -> BIN 
+6527 e5			                PUSH    HL 
+6528 78			                LD      A,B 
+6529 e6 f0		                AND     0F0H 
+652b cb 2f		                SRA     A 
+652d cb 2f		                SRA     A 
+652f cb 2f		                SRA     A 
+6531 cb 2f		                SRA     A 
+6533 1e 0a		                LD      E,10                 
+6535 cd 6e 6a		                CALL    MUL_88_2_16 
+6538 78			                LD      A,B 
+6539 e6 0f		                AND     0FH 
+653b 85			                ADD     A,L 
+653c 47			                LD      B,A 
+653d e1			                POP     HL 
+653e d1			                POP     DE 
+653f			EXT_SNTP_000: 
+653f 78			                LD      A,B 
+6540 12			                LD      (DE),A 
+6541 23			                INC     HL 
+6542 1b			                DEC     DE 
+6543 7e			                LD      A,(HL) 
+6544 fe 0d		                CP      CR 
+6546 28 04		                JR      Z,EXT_SNTP_010 
+6548 23			                INC     HL 
+6549 0c			                INC     C 
+654a 18 c3		                JR      EXT_SNTP_L000 
+654c			EXT_SNTP_010: 
+654c cd 63 16		                CALL    ROM_TIMEWRITE 
+654f c3 82 66		                JP      EXT_END 
+6552			; 
+6552			; 
+6552			; 
+6552			EXT_SPIFFSLIST: 
+6552 e5			                PUSH    HL 
+6553 cd f4 67		                CALL    INIT_SIO 
+6556 da 66 66		                JP      C,EXT_ERR5 
+6559 21 4e 6b		                LD      HL,TBL_EXT_SPIFFSLIST2 
+655c 11 ce ed		                LD      DE,SNDBUF_TOP 
+655f 01 0a 00		                LD      BC,10 
+6562 ed b0		                LDIR 
+6564 21 b7 6b		                LD      HL,TBL_CRLF 
+6567 01 02 00		                LD      BC,2 
+656a ed b0		                LDIR 
+656c 06 0c		                LD      B,12 
+656e cd 03 6a		                CALL    SENDBUF_OUT 
+6571 06 01		                LD      B,1 
+6573 cd 0e 6a		                CALL    RECVBUF_IN 
+6576 3a ff f2		                LD      A,(FLGDATA) 
+6579 e6 04		                AND     FLG_RCVTIMEOUT 
+657b c2 52 66		                JP      NZ,EXT_ERR1 
+657e 11 4e 6b		                LD      DE,TBL_EXT_SPIFFSLIST2 
+6581 06 0a		                LD      B,10 
+6583 cd 45 6a		                CALL    RECVBUF_CHK 
+6586 da 57 66		                JP      C,EXT_ERR2 
+6589 c3 ad 61		                JP      EXT_FTPLIST_000 
+658c			; 
+658c			; 
+658c			; 
+658c			EXT_SPIFFSGET: 
+658c e5			                PUSH    HL 
+658d cd f4 67		                CALL    INIT_SIO 
+6590 da 66 66		                JP      C,EXT_ERR5 
+6593 21 40 f2		                LD      HL,DISPBUF_TOP 
+6596 ed 5b 1a f2	                LD      DE,(SELLISTNO) 
+659a ed 53 a8 f0	                LD      (BIN_ACC),DE 
+659e 01 00 00		                LD      BC,0 
+65a1 cd 9f 30		                CALL    ROM_BIN2DECASC 
+65a4 21 58 6b		                LD      HL,TBL_EXT_SPIFFSGET2 
+65a7 11 ce ed		                LD      DE,SNDBUF_TOP 
+65aa 01 0a 00		                LD      BC,10 
+65ad ed b0		                LDIR 
+65af 21 42 f2		                LD      HL,DISPBUF_TOP + 2 
+65b2 01 03 00		                LD      BC,3 
+65b5 ed b0		                LDIR 
+65b7 21 b7 6b		                LD      HL,TBL_CRLF 
+65ba 01 02 00		                LD      BC,2 
+65bd ed b0		                LDIR 
+65bf 06 0f		                LD      B,15 
+65c1 cd 03 6a		                CALL    SENDBUF_OUT 
+65c4 06 01		                LD      B,1 
+65c6 cd 0e 6a		                CALL    RECVBUF_IN 
+65c9 3a ff f2		                LD      A,(FLGDATA) 
+65cc e6 04		                AND     FLG_RCVTIMEOUT 
+65ce c2 52 66		                JP      NZ,EXT_ERR1 
+65d1 11 58 6b		                LD      DE,TBL_EXT_SPIFFSGET2 
+65d4 06 09		                LD      B,9 
+65d6 cd 45 6a		                CALL    RECVBUF_CHK 
+65d9 da 57 66		                JP      C,EXT_ERR2 
+65dc c3 20 63		                JP      EXT_FTPGET_000 
+65df			; 
+65df			; 
+65df			; 
+65df			EXT_VER: 
+65df e5			                PUSH    HL 
+65e0 cd f4 67		                CALL    INIT_SIO 
+65e3 da 66 66		                JP      C,EXT_ERR5 
+65e6 21 31 6b		                LD      HL,TBL_EXT_VER 
+65e9 11 ce ed		                LD      DE,SNDBUF_TOP 
+65ec 01 03 00		                LD      BC,3 
+65ef ed b0		                LDIR 
+65f1 21 b7 6b		                LD      HL,TBL_CRLF 
+65f4 01 02 00		                LD      BC,2 
+65f7 ed b0		                LDIR 
+65f9 06 05		                LD      B,5 
+65fb cd 03 6a		                CALL    SENDBUF_OUT 
+65fe 06 01		                LD      B,1 
+6600 cd 0e 6a		                CALL    RECVBUF_IN 
+6603 3a ff f2		                LD      A,(FLGDATA) 
+6606 e6 04		                AND     FLG_RCVTIMEOUT 
+6608 20 48		                JR      NZ,EXT_ERR1 
+660a 11 31 6b		                LD      DE,TBL_EXT_VER 
+660d 06 03		                LD      B,3 
+660f cd 45 6a		                CALL    RECVBUF_CHK 
+6612 38 43		                JR      C,EXT_ERR2 
+6614 e5			                PUSH    HL 
+6615 21 90 6b		                LD      HL,TBL_ESP32_VER 
+6618 11 40 f2		                LD      DE,DISPBUF_TOP 
+661b			EXT_VER_L010: 
+661b 7e			                LD      A,(HL) 
+661c 12			                LD      (DE),A 
+661d 23			                INC     HL 
+661e 13			                INC     DE 
+661f fe 00		                CP      0 
+6621 20 f8		                JR      NZ,EXT_VER_L010 
+6623 e1			                POP     HL 
+6624 1b			                DEC     DE 
+6625			EXT_VER_L020: 
+6625 7e			                LD      A,(HL) 
+6626 fe 2c		                CP      ',' 
+6628 28 06		                JR      Z,EXT_VER_010 
+662a fe 0d		                CP      CR 
+662c 28 09		                JR      Z,EXT_VER_030 
+662e 18 02		                JR      EXT_VER_020 
+6630			EXT_VER_010: 
+6630 3e 2e		                LD      A,'.' 
+6632			EXT_VER_020: 
+6632 12			                LD      (DE),A 
+6633 23			                INC     HL 
+6634 13			                INC     DE 
+6635 18 ee		                JR      EXT_VER_L020 
+6637			EXT_VER_030: 
+6637 cd 5b 6a		                CALL    MSG_DISP 
+663a 21 a1 6b		                LD      HL,TBL_SIO_VER 
+663d 11 40 f2		                LD      DE,DISPBUF_TOP 
+6640			EXT_VER_L030: 
+6640 7e			                LD      A,(HL) 
+6641 12			                LD      (DE),A 
+6642 23			                INC     HL 
+6643 13			                INC     DE 
+6644 fe 00		                CP      0 
+6646 20 f8		                JR      NZ,EXT_VER_L030 
+6648 cd 5b 6a		                CALL    MSG_DISP 
+664b 18 35		                JR      EXT_END 
+664d			; 
+664d			; 
+664d			; 
+664d			EXT_ERR0: 
+664d 21 7d 6a		                LD      HL,ERR_MSG_000 
+6650 18 17		                JR      EXT_ERR 
+6652			EXT_ERR1: 
+6652 21 8b 6a		                LD      HL,ERR_MSG_001 
+6655 18 12		                JR      EXT_ERR 
+6657			EXT_ERR2: 
+6657 21 9c 6a		                LD      HL,ERR_MSG_002 
+665a 18 0d		                JR      EXT_ERR 
+665c			EXT_ERR3: 
+665c 21 b6 6a		                LD      HL,ERR_MSG_003 
+665f 18 08		                JR      EXT_ERR 
+6661			EXT_ERR4: 
+6661 21 cc 6a		                LD      HL,ERR_MSG_004 
+6664 18 03		                JR      EXT_ERR 
+6666			EXT_ERR5: 
+6666 21 e1 6a		                LD      HL,ERR_MSG_005 
+6669			EXT_ERR: 
+6669 af			                XOR     A 
+666a 32 49 eb		                LD      (OUTPUT_DEVICE),A 
+666d 3c			                INC     A 
+666e 32 64 ea		                LD      (CURSOR_XPOS),A 
+6671 cd ed 52		                CALL    ROM_MSGOUT 
+6674 cd ca 5f		                CALL    ROM_DSPCRLF 
+6677 cd 43 0d		                CALL    ROM_BEEP 
+667a af			                XOR     A 
+667b cd af 68		                CALL    TERM_SIO 
+667e e1			                POP     HL 
+667f c3 3d 60		                JP      EXT_MYERR_EXIT 
+6682			EXT_END: 
+6682 af			                XOR     A 
+6683 cd af 68		                CALL    TERM_SIO 
+6686 e1			                POP     HL 
+6687 c3 3a 60		                JP      EXT_EXIT 
+668a			; 
+668a			; 
+668a			; 
+668a			PARSER_EXTPARAM: 
+668a e5			                PUSH    HL 
+668b 21 00 00		                LD      HL,0 
+668e 22 1c f2		                LD      (LOADADRS),    HL 
+6691 22 1e f2		                LD      (EXECADRS),    HL 
+6694 22 20 f2		                LD      (LOAD_ENDADRS),HL 
+6697 22 22 f2		                LD      (LOADSIZE),    HL 
+669a af			                XOR     A 
+669b 32 2c f2		                LD      (EXTNO),A 
+669e 3a ff f2		                LD      A,(FLGDATA) 
+66a1 e6 fd		                AND     ~FLG_LOADBAS 
+66a3 e6 fb		                AND     ~FLG_RCVTIMEOUT 
+66a5 32 ff f2		                LD      (FLGDATA),A 
+66a8 e1			                POP     HL 
+66a9 11 f6 6a		                LD      DE,TBL_EXT 
+66ac			PARSER_EXTPARAM_000: 
+66ac 1a			                LD      A,(DE) 
+66ad fe 00		                CP      0 
+66af ca 60 67		                JP      Z,SETCFRET 
+66b2 e5			                PUSH    HL 
+66b3			PARSER_EXTPARAM_010: 
+66b3 be			                CP      (HL) 
+66b4 20 09		                JR      NZ,PARSER_EXTPARAM_020 
+66b6 23			                INC     HL 
+66b7 13			                INC     DE 
+66b8 1a			                LD      A,(DE) 
+66b9 fe 00		                CP      0 
+66bb 28 11		                JR      Z,PARSER_EXTPARAM_040 
+66bd 18 f4		                JR      PARSER_EXTPARAM_010 
+66bf			PARSER_EXTPARAM_020: 
+66bf e1			                POP     HL 
+66c0			PARSER_EXTPARAM_030: 
+66c0 13			                INC     DE 
+66c1 1a			                LD      A,(DE) 
+66c2 fe 00		                CP      0 
+66c4 20 fa		                JR      NZ,PARSER_EXTPARAM_030 
+66c6 13			                INC     DE 
+66c7 13			                INC     DE 
+66c8 13			                INC     DE 
+66c9 13			                INC     DE 
+66ca 13			                INC     DE 
+66cb 13			                INC     DE 
+66cc 18 de		                JR      PARSER_EXTPARAM_000 
+66ce			PARSER_EXTPARAM_040: 
+66ce 2b			                DEC     HL 
+66cf 13			                INC     DE 
+66d0 1a			                LD      A,(DE) 
+66d1 32 2c f2		                LD      (EXTNO),A 
+66d4 13			                INC     DE 
+66d5 e5			                PUSH    HL 
+66d6 1a			                LD      A,(DE) 
+66d7 6f			                LD      L,A 
+66d8 13			                INC     DE 
+66d9 1a			                LD      A,(DE) 
+66da 67			                LD      H,A 
+66db e5			                PUSH    HL 
+66dc dd e1		                POP     IX 
+66de 13			                INC     DE 
+66df 1a			                LD      A,(DE) 
+66e0 6f			                LD      L,A 
+66e1 13			                INC     DE 
+66e2 1a			                LD      A,(DE) 
+66e3 67			                LD      H,A 
+66e4 e5			                PUSH    HL 
+66e5 fd e1		                POP     IY 
+66e7 e1			                POP     HL 
+66e8 d1			                POP     DE 
+66e9 dd e9		                JP      (IX) 
+66eb			PARSER_EXT_BME: 
+66eb			PARSER_EXT_FTPLIST: 
+66eb			PARSER_EXT_SNTP: 
+66eb			PARSER_EXT_SPIFFSLIST: 
+66eb			PARSER_EXT_VER: 
+66eb 23			                INC     HL 
+66ec 7e			                LD      A,(HL) 
+66ed fe 00		                CP      0 
+66ef 28 6c		                JR      Z,CLRCFRET 
+66f1 fe 3a		                CP      ':' 
+66f3 28 68		                JR      Z,CLRCFRET 
+66f5 18 69		                JR      SETCFRET 
+66f7			PARSER_EXT_FTPGET: 
+66f7			PARSER_EXT_SPIFFSGET: 
+66f7 cd 49 67		                CALL    PARSER_SKIP 
+66fa fe 0f		                CP      0FH             ; ID CODE 0FH : 1 byte hex 
+66fc 28 17		                JR      Z,PARSER_EXT_FTPGET_210 
+66fe fe 11		                CP      11H             ; ID CODE 11H -> 0, 12H -> 1, ... 19H -> 8, 1AH -> 9 
+6700 28 0c		                JR      Z,PARSER_EXT_FTPGET_000 
+6702 fe 1a		                CP      1AH 
+6704 38 08		                JR      C,PARSER_EXT_FTPGET_000 
+6706 28 06		                JR      Z,PARSER_EXT_FTPGET_000 
+6708 fe 1c		                CP      1CH             ; ID CODE 0CH : 2 byte hex 
+670a 28 0f		                JR      Z,PARSER_EXT_FTPGET_300 
+670c 18 52		                JR      SETCFRET 
+670e			PARSER_EXT_FTPGET_000: 
+670e d6 11		                SUB     A,11H 
+6710 5f			                LD      E,A 
+6711 af			                XOR     A 
+6712 57			                LD      D,A 
+6713 18 0a		                JR      PARSER_EXT_FTPGET_310 
+6715			PARSER_EXT_FTPGET_210: 
+6715 23			                INC     HL 
+6716 5e			                LD      E,(HL) 
+6717 af			                XOR     A 
+6718 57			                LD      D,A 
+6719 18 04		                JR      PARSER_EXT_FTPGET_310 
+671b			PARSER_EXT_FTPGET_300: 
+671b 23			                INC     HL 
+671c 5e			                LD      E,(HL) 
+671d 23			                INC     HL 
+671e 56			                LD      D,(HL) 
+671f			PARSER_EXT_FTPGET_310: 
+671f ed 53 1a f2	                LD      (SELLISTNO),DE 
+6723 23			                INC     HL 
+6724 7e			                LD      A,(HL) 
+6725 fe 00		                CP      0 
+6727 28 34		                JR      Z,CLRCFRET 
+6729 fe 3a		                CP      ':' 
+672b 28 30		                JR      Z,CLRCFRET 
+672d 2b			                DEC     HL 
+672e cd 49 67		                CALL    PARSER_SKIP 
+6731 fe 0c		                CP      0CH             ; ID CODE "&H" 
+6733 20 2b		                JR      NZ,SETCFRET 
+6735 23			                INC     HL 
+6736 5e			                LD      E,(HL) 
+6737 23			                INC     HL 
+6738 56			                LD      D,(HL) 
+6739 ed 53 1e f2	                LD      (EXECADRS),DE 
+673d 23			                INC     HL 
+673e 7e			                LD      A,(HL) 
 673f fe 00		                CP      0 
-6741 20 e1		                JR      NZ,IN_SIO_010 
-6743 78			                LD      A,B 
-6744 fe 00		                CP      0 
-6746 20 dc		                JR      NZ,IN_SIO_010 
-6748 2b			                DEC     HL 
-6749 7d			                LD      A,L 
-674a fe 00		                CP      0 
-674c 20 d6		                JR      NZ,IN_SIO_010 
-674e 7c			                LD      A,H 
-674f fe 00		                CP      0 
-6751 20 d1		                JR      NZ,IN_SIO_010 
-6753			IN_SIO_060: 
-6753 3a ff f2		                LD      A,(FLGDATA) 
-6756 f6 04		                OR      FLG_RCVTIMEOUT 
-6758 32 ff f2		                LD      (FLGDATA),A 
-675b af			                XOR     A 
-675c 18 0d		                JR      IN_SIO_040 
-675e			IN_SIO_070: 
-675e 3a ff f2		                LD      A,(FLGDATA) 
-6761 f6 08		                OR      FLG_RCVCANCEL 
-6763 32 ff f2		                LD      (FLGDATA),A 
-6766 af			                XOR     A 
-6767 18 02		                JR      IN_SIO_040 
-6769			IN_SIO_030: 
-6769 db 20		                IN      A,(USARTDW) 
-676b			IN_SIO_040: 
-676b e1			                POP     HL 
-676c d1			                POP     DE 
-676d c1			                POP     BC 
-676e c9			                RET 
-676f			IN_SIO_050: 
-676f 3a 21 f2		                LD      A,(CTLWORD) 
-6772 f6 10		                OR      00010000B 
-6774 d3 21		                OUT     (USARTCW),A 
-6776 18 c5		                JR      IN_SIO_020 
-6778			; 
-6778			; 
-6778			; 
-6778			OUT_SIO: 
-6778 f5			                PUSH    AF 
-6779			OUT_SIO1: 
-6779 db 21		                IN      A,(USARTCW) 
-677b e6 01		                AND     00000001B 
-677d 28 fa		                JR      Z,OUT_SIO1 
-677f f1			                POP     AF 
-6780 d3 20		                OUT     (USARTDW),A 
-6782 c9			                RET 
-6783			; 
-6783			; 
-6783			; 
-6783			SENDBUF_OUT: 
-6783 21 70 f2		                LD      HL,SNDBUF_TOP 
-6786			SENDBUF_OUT_000: 
-6786 7e			                LD      A,(HL) 
-6787 cd 78 67		                CALL    OUT_SIO 
-678a 23			                INC     HL 
-678b 10 f9		                DJNZ    SENDBUF_OUT_000 
-678d c9			                RET 
-678e			; 
-678e			; 
-678e			; 
-678e			RECVBUF_IN: 
-678e 78			                LD      A,B 
-678f 32 24 f2		                LD      (LFRECVCOUNT),A 
-6792 21 70 f2		                LD      HL,RCVBUF_TOP 
-6795			RECVBUF_IN_000: 
-6795 cd 11 67		                CALL    IN_SIO 
-6798 c5			                PUSH    BC 
-6799 47			                LD      B,A 
-679a 3a ff f2		                LD      A,(FLGDATA) 
-679d e6 04		                AND     FLG_RCVTIMEOUT 
-679f 78			                LD      A,B 
-67a0 c1			                POP     BC 
-67a1 20 08		                JR      NZ,RECVBUF_IN_020                 
-67a3 77			                LD      (HL),A 
-67a4 fe 0a		                CP      LF 
-67a6 28 15		                JR      Z,RECVBUF_IN_030 
-67a8			RECVBUF_IN_010: 
-67a8 23			                INC     HL 
-67a9 18 ea		                JR      RECVBUF_IN_000 
-67ab			RECVBUF_IN_020: 
-67ab 3a 24 f2		                LD      A,(LFRECVCOUNT) 
-67ae 4f			                LD      C,A 
-67af 78			                LD      A,B 
-67b0 b9			                CP      C 
-67b1 28 11		                JR      Z,RECVBUF_IN_040 
-67b3 3a ff f2		                LD      A,(FLGDATA) 
-67b6 e6 fb		                AND     ~FLG_RCVTIMEOUT 
-67b8 32 ff f2		                LD      (FLGDATA),A 
-67bb 18 07		                JR      RECVBUF_IN_040 
-67bd			RECVBUF_IN_030: 
-67bd 05			                DEC     B 
-67be af			                XOR     A 
-67bf b8			                CP      B 
-67c0 28 02		                JR      Z,RECVBUF_IN_040 
-67c2 18 e4		                JR      RECVBUF_IN_010 
-67c4			RECVBUF_IN_040: 
-67c4 c9			                RET 
-67c5			; 
-67c5			; 
-67c5			; 
-67c5			RECVBUF_CHK: 
-67c5 21 70 f2		                LD      HL,RCVBUF_TOP 
-67c8			RECVBUF_CHK1: 
-67c8 1a			                LD      A,(DE) 
-67c9 be			                CP      (HL) 
-67ca c2 ca 65		                JP      NZ,SETCFRET 
-67cd 23			                INC     HL 
-67ce 13			                INC     DE 
-67cf 10 f7		                DJNZ    RECVBUF_CHK1 
-67d1 3e 3a		                LD      A,':' 
-67d3 be			                CP      (HL) 
-67d4 c2 ca 65		                JP      NZ,SETCFRET 
-67d7 23			                INC     HL 
-67d8 c3 c7 65		                JP      CLRCFRET 
-67db			; 
-67db			; 
-67db			; 
-67db			MSG_DISP: 
-67db af			                XOR     A 
-67dc 12			                LD      (DE),A 
-67dd 32 49 eb		                LD      (OUTPUT_DEVICE),A 
-67e0 3c			                INC     A 
-67e1 32 64 ea		                LD      (CURSOR_XPOS),A 
-67e4 21 30 f2		                LD      HL,DISPBUF_TOP 
-67e7 cd ed 52		                CALL    ROM_MSGOUT 
-67ea cd ca 5f		                CALL    ROM_DSPCRLF 
-67ed c9			                RET 
-67ee			; 
-67ee			; D = 0 
-67ee			; HL = E * A 
-67ee			; 
-67ee			MUL_88_2_16: 
-67ee 16 00		                LD      D,0 
-67f0 21 00 00		                LD      HL,0 
-67f3 06 08		                LD      B,8 
-67f5			MUL_L000: 
-67f5 29			                ADD     HL,HL 
-67f6 87			                ADD     A,A 
-67f7 30 01		                JR      NC,MUL_000 
-67f9 19			                ADD     HL,DE 
-67fa			MUL_000: 
-67fa 10 f9		                DJNZ    MUL_L000 
-67fc c9			                RET 
-67fd			; 
-67fd			; 
-67fd			; 
-67fd .. 00		ERR_MSG_000:    DB      "abort receive", 0 
-680b .. 00		ERR_MSG_001:    DB      "receive time out", 0 
-681c .. 00		ERR_MSG_002:    DB      "received command mismatch", 0 
-6836 .. 00		ERR_MSG_003:    DB      "ftpget failed", 0 
-6844 .. 00		ERR_MSG_004:    DB      "load address not set", 0 
-6859			TBL_CMD: 
-6859 .. 00 01		TBL_CMD_BME:    DB      "BME",       0, 1 
-685e 55 65		                DW      PARSER_CMD_BME 
-6860 60 60		                DW      CMD_BME 
-6862 .. 93 00 02	TBL_CMD_FTPLIST:DB      "FTP", 93H,  0, 2       ; reserve code 93H : "LIST" 
-6868 55 65		                DW      PARSER_CMD_FTPLIST 
-686a 04 61		                DW      CMD_FTPLIST 
-686c .. c7 00 03	TBL_CMD_FTPGET: DB      "FTP", 0C7H, 0, 3       ; reserve code C7H : "GET" 
-6872 61 65		                DW      PARSER_CMD_FTPGET 
-6874 54 62		                DW      CMD_FTPGET 
-6876 .. 00 04		TBL_CMD_SNTP:   DB      "SNTP",      0, 4 
-687c 55 65		                DW      PARSER_CMD_SNTP 
-687e fc 63		                DW      CMD_SNTP 
-6880 .. 00 06		TBL_CMD_VER:    DB      "VER",       0, 6 
-6885 55 65		                DW      PARSER_CMD_VER 
-6887 57 64		                DW      CMD_VER 
-6889 00			                DB      0 
-688a			TBL_CMD_FTPLIST2: 
-688a ..			                DB      "FTPLIST" 
-6891 ..			TBL_CMD_FTPGET2:DB      "FTPGET:" 
-6898 ..			TBL_CMD_LIST:   DB      "LIST:" 
-689d .. 00		TBL_COUNT_MSG0: DB      "file count: ", 0 
-68aa .. 00		TBL_TEMP_MSG0:  DB      "temp : ", 0 
-68b2 df 43 00		TBL_TEMP_MSG1:  DB      0DFH, "C", 0 
-68b5 .. 00		TBL_HUMI_MSG0:  DB      "humi : ", 0 
-68bd .. 00		TBL_HUMI_MSG1:  DB      "%", 0 
-68bf .. 00		TBL_PRESS_MSG0: DB      "press: ", 0 
-68c7 .. 00		TBL_PRESS_MSG1: DB      "hPa", 0 
-68cb .. 00		TBL_ESP32_VER:  DB      "esp32 firmware v", 0 
-68dc .. 31 2e 30 2e 30 00	TBL_SIO_VER:    DB      "sio   firmware v", 30H + VER_MAJOR, ".", 30H + VER_MINOR, ".", 30H + VER_REVISION, 0 
-68f2 0d 0a		TBL_CRLF:       DB      CR, LF 
-68f4			                ;END 
-68f4			 
+6741 28 1a		                JR      Z,CLRCFRET 
+6743 fe 3a		                CP      ':' 
+6745 28 16		                JR      Z,CLRCFRET 
+6747 18 17		                JR      SETCFRET 
+6749			PARSER_SKIP: 
+6749 23			                INC     HL 
+674a 7e			                LD      A,(HL) 
+674b fe 20		                CP      ' ' 
+674d 28 fa		                JR      Z,PARSER_SKIP 
+674f fe 2c		                CP      ',' 
+6751 28 03		                JR      Z,PARSER_SKIP_010 
+6753 d1			                POP     DE 
+6754 18 0a		                JR      SETCFRET 
+6756			PARSER_SKIP_010: 
+6756 23			                INC     HL 
+6757 7e			                LD      A,(HL) 
+6758 fe 20		                CP      ' ' 
+675a 28 fa		                JR      Z,PARSER_SKIP_010 
+675c c9			                RET 
+675d			CLRCFRET: 
+675d 37			                SCF 
+675e 3f			                CCF 
+675f c9			                RET 
+6760			SETCFRET: 
+6760 37			                SCF 
+6761 c9			                RET 
+6762			; 
+6762			; 
+6762			; 
+6762			CLR_RCVBUF: 
+6762 21 ce ed		                LD      HL,RCVBUF_TOP 
+6765 f5			                PUSH    AF 
+6766 e5			                PUSH    HL 
+6767 06 84		                LD      B,RCVBUF_BOTTOM - RCVBUF_TOP + 1 
+6769 af			                XOR     A 
+676a			CLR_RCVBUF_L010: 
+676a 77			                LD      (HL),A 
+676b 23			                INC     HL 
+676c 10 fc		                DJNZ    CLR_RCVBUF_L010 
+676e e1			                POP     HL 
+676f f1			                POP     AF 
+6770 c9			                RET 
+6771			; 
+6771			; 
+6771			; 
+6771			CHK_MEMOVER: 
+6771 d5			                PUSH    DE 
+6772 21 00 60		                LD      HL,_PROG_TOP 
+6775 11 00 80		                LD      DE,PC8001RAM_TOP 
+6778 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
+677b			                                        ; HL<DE : 0  1 
+677b			                                        ; HL=DE : 1  0 
+677b			                                        ; HL>DE : 0  0 
+677b d1			                POP     DE 
+677c 38 17		                JR      C,CHK_MEMOVER_010 
+677e d5			                PUSH    DE 
+677f eb			                EX      DE,HL 
+6780 09			                ADD     HL,BC 
+6781 11 00 60		                LD      DE,_PROG_TOP 
+6784 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
+6787			                                        ; HL<DE : 0  1 
+6787			                                        ; HL=DE : 1  0 
+6787			                                        ; HL>DE : 0  0 
+6787 d1			                POP     DE 
+6788 38 0b		                JR      C,CHK_MEMOVER_010 
+678a d5			                PUSH    DE 
+678b eb			                EX      DE,HL 
+678c 09			                ADD     HL,BC 
+678d 11 b9 6b		                LD      DE,_PROG_END 
+6790 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
+6793			                                        ; HL<DE : 0  1 
+6793			                                        ; HL=DE : 1  0 
+6793			                                        ; HL>DE : 0  0 
+6793 d1			                POP     DE 
+6794 d8			                RET     C 
+6795			CHK_MEMOVER_010: 
+6795 d5			                PUSH    DE 
+6796 eb			                EX      DE,HL 
+6797 09			                ADD     HL,BC 
+6798 eb			                EX      DE,HL 
+6799 2a 26 f2		                LD      HL,(ROM_WORKTOP) 
+679c cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
+679f			                                        ; HL<DE : 0  1 
+679f			                                        ; HL=DE : 1  0 
+679f			                                        ; HL>DE : 0  0 
+679f d1			                POP     DE 
+67a0 c9			                RET 
+67a1			; 
+67a1			; 
+67a1			; 
+67a1			CHK_RCVDATA: 
+67a1 21 ce ed		                LD      HL,RCVBUF_TOP 
+67a4 7e			                LD      A,(HL) 
+67a5 fe 01		                CP      SOH 
+67a7 20 b7		                JR      NZ,SETCFRET 
+67a9 4f			                LD      C,A 
+67aa 23			                INC     HL 
+67ab 3a 2d f2		                LD      A,(CHKBLKNO) 
+67ae be			                CP      (HL) 
+67af 20 af		                JR      NZ,SETCFRET 
+67b1 81			                ADD     A,C 
+67b2 4f			                LD      C,A 
+67b3 23			                INC     HL 
+67b4 3a 2d f2		                LD      A,(CHKBLKNO) 
+67b7 2f			                CPL 
+67b8 be			                CP      (HL) 
+67b9 20 a5		                JR      NZ,SETCFRET 
+67bb 81			                ADD     A,C 
+67bc 4f			                LD      C,A 
+67bd 23			                INC     HL 
+67be 06 80		                LD      B,128 
+67c0			CHK_RCVDATA_L010: 
+67c0 7e			                LD      A,(HL) 
+67c1 81			                ADD     A,C 
+67c2 4f			                LD      C,A 
+67c3 23			                INC     HL 
+67c4 10 fa		                DJNZ    CHK_RCVDATA_L010 
+67c6 79			                LD      A,C 
+67c7 be			                CP      (HL) 
+67c8 c2 60 67		                JP      NZ,SETCFRET 
+67cb c3 5d 67		                JP      CLRCFRET 
+67ce			; 
+67ce			; 
+67ce			; 
+67ce			DISP_PROGRESS: 
+67ce c5			                PUSH    BC 
+67cf d5			                PUSH    DE 
+67d0 e5			                PUSH    HL 
+67d1 3e 01		                LD      A,1 
+67d3 32 64 ea		                LD      (CURSOR_XPOS),A 
+67d6 3e 5b		                LD      A,'[' 
+67d8 cd 57 02		                CALL    ROM_DSPCHR 
+67db 2a 1c f2		                LD      HL,(LOADADRS) 
+67de cd c0 5e		                CALL    ROM_DSPHEX4 
+67e1 3e 2d		                LD      A,'-' 
+67e3 cd 57 02		                CALL    ROM_DSPCHR 
+67e6 eb			                EX      DE,HL 
+67e7 2b			                DEC     HL 
+67e8 cd c0 5e		                CALL    ROM_DSPHEX4 
+67eb 3e 5d		                LD      A,']' 
+67ed cd 57 02		                CALL    ROM_DSPCHR 
+67f0 e1			                POP     HL 
+67f1 d1			                POP     DE 
+67f2 c1			                POP     BC 
+67f3 c9			                RET 
+67f4			; 
+67f4			; 
+67f4			; 
+67f4			INIT_SIO: 
+67f4 cd 2f 69		                CALL    ENABLE_SIO 
+67f7 af			                XOR     A               ; DUMMY OUT 
+67f8 d3 21		                OUT     (USARTCW),A 
+67fa d3 21		                OUT     (USARTCW),A 
+67fc d3 21		                OUT     (USARTCW),A 
+67fe 3e 40		                LD      A,01000000B     ; SOFT RESET 
+6800 d3 21		                OUT     (USARTCW),A 
+6802 3e 4e		                LD      A,01001110B     ; MODE SETUP                    : 8N11 
+6804			                                        ; BAUD RATE FACTOR              : 16X 
+6804			                                        ; CHARACTER LENGTH              : 8BITS 
+6804			                                        ; PARITY ENABLE                 : DISABLE 
+6804			                                        ; EVEN PARITY GENARATION/CHECK  : ODD 
+6804			                                        ; NUMBER OF STOP BITS           : 1 BIT 
+6804 d3 21		                OUT     (USARTCW),A 
+6806 32 2a f2		                LD      (MODEWORD),A 
+6809 3e 05		                LD      A,00000101B     ; COMMAND SETUP  TRANSMIT ENABLE 
+680b			                                        ;                DATA TERMINAL READY : FALSE 
+680b			                                        ;                RECEIVE ENABLE 
+680b			                                        ;                ERROR RESET         : FALSE 
+680b			                                        ;                REQUEST TO SEND     : FALSE 
+680b d3 21		                OUT     (USARTCW),A 
+680d 32 2b f2		                LD      (CTLWORD),A 
+6810 cd 47 69		                CALL    ENABLE_DTR 
+6813 cd 57 69		                CALL    ENABLE_RTS 
+6816			INIT_SIO_000: 
+6816 db 21		                IN      A,(USARTCW)     ; ESP32-WROOM-32 -> 8251 power-on receive dust removal support 
+6818 57			                LD      D,A 
+6819 e6 38		                AND     00111000B 
+681b 20 09		                JR      NZ,INIT_SIO_010 
+681d 7a			                LD      A,D 
+681e e6 02		                AND     00000010B 
+6820 28 0d		                JR      Z,INIT_SIO_020 
+6822 db 20		                IN      A,(USARTDW) 
+6824 18 f0		                JR      INIT_SIO_000 
+6826			INIT_SIO_010: 
+6826 3a 2b f2		                LD      A,(CTLWORD) 
+6829 f6 10		                OR      00010000B 
+682b d3 21		                OUT     (USARTCW),A 
+682d 18 e7		                JR      INIT_SIO_000 
+682f			INIT_SIO_020: 
+682f 3a ff f2		                LD      A,(FLGDATA) 
+6832 e6 01		                AND     FLG_FIRSTSEND 
+6834 20 18		                JR      NZ,INIT_SIO_030 
+6836 11 ce ed		                LD      DE,SNDBUF_TOP   ; 8251 -> ESP32-WROOM-32 power-on send dust removal support 
+6839 21 b7 6b		                LD      HL,TBL_CRLF 
+683c 01 02 00		                LD      BC,2 
+683f ed b0		                LDIR 
+6841 06 02		                LD      B,2 
+6843 cd 03 6a		                CALL    SENDBUF_OUT 
+6846 3a ff f2		                LD      A,(FLGDATA) 
+6849 f6 01		                OR      FLG_FIRSTSEND 
+684b 32 ff f2		                LD      (FLGDATA),A 
+684e			INIT_SIO_030: 
+684e 21 00 ea		                LD      HL,NROM_WORKTOP 
+6851 22 26 f2		                LD      (ROM_WORKTOP),HL 
+6854 21 00 00		                LD      HL,0 
+6857 22 24 f2		                LD      (SAVESIOIRQ),HL 
+685a af			                XOR     A 
+685b 32 2f f2		                LD      (RCVBUF_RPOS),A 
+685e 32 30 f2		                LD      (RCVBUF_WPOS),A 
+6861 3a ff f2		                LD      A,(FLGDATA) 
+6864 e6 ef		                AND     ~FLG_ENABLESTOP 
+6866 e6 df		                AND     ~FLG_EXECPC8001 
+6868 32 ff f2		                LD      (FLGDATA),A 
+686b 3a 5f 17		                LD      A,(ROM_PC8001CHK) 
+686e fe 80		                CP      80H             ; N-BASIC IMPLEMENTED IN PC-8001 
+6870 28 07		                JR      Z,INIT_SIO_100 
+6872 fe af		                CP      0AFH            ; N-BASIC IMPLEMENTED IN PC-8001mkII 
+6874 28 0d		                JR      Z,INIT_SIO_200 
+6876 c3 60 67		                JP      SETCFRET 
+6879			INIT_SIO_100: 
+6879 3a ff f2		                LD      A,(FLGDATA) 
+687c f6 20		                OR      FLG_EXECPC8001 
+687e 32 ff f2		                LD      (FLGDATA),A 
+6881 18 29		                JR      INIT_SIO_900 
+6883			INIT_SIO_200: 
+6883 2a fd f0		                LD      HL,(CMD_ENTRY + 1) 
+6886 11 30 e7		                LD      DE,PC8001MK2_N80MODE 
+6889 cd d3 5e		                CALL    ROM_CMPHLDE     ;         Z CY 
+688c			                                        ; HL<DE : 0  1 
+688c			                                        ; HL=DE : 1  0 
+688c			                                        ; HL>DE : 0  0 
+688c 28 02		                JR      Z,INIT_SIO_210 
+688e 18 06		                JR      INIT_SIO_220 
+6890			INIT_SIO_210: 
+6890 21 00 e6		                LD      HL,N80ROM_WORKTOP 
+6893 22 26 f2		                LD      (ROM_WORKTOP),HL 
+6896			INIT_SIO_220: 
+6896 2a 00 80		                LD      HL,(VECTOR_TBL_SIO) 
+6899 22 24 f2		                LD      (SAVESIOIRQ),HL 
+689c f3			                DI 
+689d 21 e4 68		                LD      HL,SIOIRQ_ENTRY 
+68a0 22 00 80		                LD      (VECTOR_TBL_SIO),HL 
+68a3 3e 07		                LD      A,7 
+68a5 d3 e4		                OUT     (INTLEVEL),A 
+68a7 3e 04		                LD      A,00000100B     ; bit2 : /RxMF USART    IRQ ENABLE 
+68a9			                                        ; bit1 : /VRMF VRTC     IRQ DISABLE 
+68a9			                                        ; bit0 : /RTMF INTERVAL IRQ DISABLE 
+68a9 d3 e6		                OUT     (INTMASK),A 
+68ab fb			                EI 
+68ac			INIT_SIO_900: 
+68ac c3 5d 67		                JP      CLRCFRET 
+68af			 
+68af			; 
+68af			; A :  0 no wait term sio 
+68af			;   : !0 1sec wait term sio 
+68af			; 
+68af			TERM_SIO: 
+68af d5			                PUSH    DE 
+68b0 fe 00		                CP      0 
+68b2 28 12		                JR      Z,TERM_SIO_020 
+68b4 cd 02 16		                CALL    ROM_TIMEREAD 
+68b7 3a 76 ea		                LD      A,(BCD_TIME_SEC) 
+68ba 57			                LD      D,A 
+68bb			TERM_SIO_010: 
+68bb d5			                PUSH    DE 
+68bc cd 02 16		                CALL    ROM_TIMEREAD 
+68bf d1			                POP     DE 
+68c0 3a 76 ea		                LD      A,(BCD_TIME_SEC) 
+68c3 ba			                CP      D 
+68c4 28 f5		                JR      Z,TERM_SIO_010 
+68c6			TERM_SIO_020: 
+68c6 3a ff f2		                LD      A,(FLGDATA) 
+68c9 e6 20		                AND     FLG_EXECPC8001 
+68cb 20 0c		                JR      NZ,TERM_SIO_030 
+68cd f3			                DI 
+68ce 2a 24 f2		                LD      HL,(SAVESIOIRQ) 
+68d1 22 00 80		                LD      (VECTOR_TBL_SIO),HL 
+68d4 3e 00		                LD      A,00000000B     ; bit2 : /RxMF USART    IRQ DISABLE 
+68d6			                                        ; bit1 : /VRMF VRTC     IRQ DISABLE 
+68d6			                                        ; bit0 : /RTMF INTERVAL IRQ DISABLE 
+68d6 d3 e6		                OUT     (INTMASK),A 
+68d8 fb			                EI 
+68d9			TERM_SIO_030: 
+68d9 cd 5f 69		                CALL    DISABLE_RTS 
+68dc cd 4f 69		                CALL    DISABLE_DTR 
+68df cd 3c 69		                CALL    DISABLE_SIO 
+68e2 d1			                POP     DE 
+68e3 c9			                RET 
+68e4			; 
+68e4			; 
+68e4			; 
+68e4			SIOIRQ_ENTRY: 
+68e4 f3			                DI 
+68e5 08			                EX      AF,AF' 
+68e6 d9			                EXX 
+68e7 3a 55 ea		                LD      A,(LAST_INTLEVEL) 
+68ea f5			                PUSH    AF 
+68eb			; 
+68eb 3e 07		                LD      A,7 
+68ed d3 e4		                OUT     (INTLEVEL),     A 
+68ef 32 55 ea		                LD      (LAST_INTLEVEL),A 
+68f2 32 56 ea		                LD      (FLG_INTEXEC),  A 
+68f5			; 
+68f5			SIOIRQ_010: 
+68f5 db 21		                IN      A,(USARTCW) 
+68f7 57			                LD      D,A 
+68f8 e6 38		                AND     00111000B 
+68fa 20 23		                JR      NZ,SIOIRQ_030 
+68fc 7a			                LD      A,D 
+68fd e6 02		                AND     00000010B 
+68ff 28 27		                JR      Z,SIOIRQ_EXIT 
+6901			; 
+6901 3a 30 f2		                LD      A,(RCVBUF_WPOS) 
+6904 21 ce ed		                LD      HL,RCVBUF_TOP 
+6907 06 00		                LD      B,0 
+6909 4f			                LD      C,A 
+690a 09			                ADD     HL,BC 
+690b db 20		                IN      A,(USARTDW) 
+690d 77			                LD      (HL),A 
+690e 0c			                INC     C 
+690f 79			                LD      A,C 
+6910 06 84		                LD      B,RCVBUF_BOTTOM - RCVBUF_TOP + 1 
+6912 b8			                CP      B 
+6913 20 04		                JR      NZ,SIOIRQ_020 
+6915 38 02		                JR      C,SIOIRQ_020 
+6917 0e 00		                LD      C,0 
+6919			SIOIRQ_020: 
+6919 79			                LD      A,C 
+691a 32 30 f2		                LD      (RCVBUF_WPOS),A 
+691d 18 09		                JR      SIOIRQ_EXIT 
+691f			SIOIRQ_030: 
+691f 3a 2b f2		                LD      A,(CTLWORD) 
+6922 f6 10		                OR      00010000B 
+6924 d3 21		                OUT     (USARTCW),A 
+6926 18 cd		                JR      SIOIRQ_010 
+6928			SIOIRQ_EXIT: 
+6928			; 
+6928 f1			                POP     AF 
+6929 d3 e4		                OUT     (INTLEVEL),A 
+692b d9			                EXX 
+692c 08			                EX      AF,AF' 
+692d fb			                EI 
+692e c9			                RET 
+692f			; 
+692f			; 
+692f			; 
+692f			ENABLE_SIO: 
+692f 3a 66 ea		                LD      A,(CTL1_OUTDATA) 
+6932 e6 cf		                AND     11001111B       ; BS2,BS1 CLR 
+6934 f6 20		                OR      00100000B       ; BS2 ON 
+6936 d3 30		                OUT     (CONTROL1),A 
+6938 32 66 ea		                LD      (CTL1_OUTDATA),A 
+693b c9			                RET 
+693c			; 
+693c			; 
+693c			; 
+693c			DISABLE_SIO: 
+693c 3a 66 ea		                LD      A,(CTL1_OUTDATA) 
+693f e6 cf		                AND     11001111B       ; BS2,BS1 CLR 
+6941 d3 30		                OUT     (CONTROL1),A 
+6943 32 66 ea		                LD      (CTL1_OUTDATA),A 
+6946 c9			                RET 
+6947			; 
+6947			; 
+6947			; 
+6947			ENABLE_DTR: 
+6947 3a 2b f2		                LD      A,(CTLWORD) 
+694a f6 02		                OR      00000010B       ; DATA TERMINAL READY : TRUE 
+694c d3 21		                OUT     (USARTCW),A 
+694e c9			                RET 
+694f			; 
+694f			; 
+694f			; 
+694f			DISABLE_DTR: 
+694f 3a 2b f2		                LD      A,(CTLWORD) 
+6952 e6 fd		                AND     11111101B       ; DATA TERMINAL READY : FALSE 
+6954 d3 21		                OUT     (USARTCW),A 
+6956 c9			                RET 
+6957			; 
+6957			; 
+6957			; 
+6957			ENABLE_RTS: 
+6957 3a 2b f2		                LD      A,(CTLWORD) 
+695a f6 20		                OR      00100000B       ; REQUEST TO SEND : TRUE 
+695c d3 21		                OUT     (USARTCW),A 
+695e c9			                RET 
+695f			; 
+695f			; 
+695f			; 
+695f			DISABLE_RTS: 
+695f 3a 2b f2		                LD      A,(CTLWORD) 
+6962 e6 df		                AND     11011111B       ; REQUEST TO SEND : FALSE 
+6964 d3 21		                OUT     (USARTCW),A 
+6966 c9			                RET 
+6967			; 
+6967			; 
+6967			; 
+6967			IN_SIO: 
+6967 3a ff f2		                LD      A,(FLGDATA) 
+696a e6 fb		                AND     ~FLG_RCVTIMEOUT 
+696c e6 f7		                AND     ~FLG_RCVCANCEL 
+696e 32 ff f2		                LD      (FLGDATA),A 
+6971 c5			                PUSH    BC 
+6972 d5			                PUSH    DE 
+6973 e5			                PUSH    HL 
+6974 21 03 00		                LD      HL,3            ; 5000msec Timer 
+6977 01 00 0a		                LD      BC,0A00H 
+697a			IN_SIO_010: 
+697a 3a ff f2		                LD      A,(FLGDATA) 
+697d e6 10		                AND     FLG_ENABLESTOP 
+697f 28 06		                JR      Z,IN_SIO_020 
+6981 db 09		                IN      A,(KEYBRD9) 
+6983 e6 01		                AND     00000001B 
+6985 28 60		                JR      Z,IN_SIO_080 
+6987			IN_SIO_020: 
+6987 3a ff f2		                LD      A,(FLGDATA) 
+698a e6 20		                AND     FLG_EXECPC8001 
+698c 20 23		                JR      NZ,IN_SIO_040 
+698e			; 
+698e 3a 2f f2		                LD      A,(RCVBUF_RPOS) 
+6991 5f			                LD      E,A 
+6992 3a 30 f2		                LD      A,(RCVBUF_WPOS) 
+6995 bb			                CP      E 
+6996 ca c6 69		                JP      Z,IN_SIO_060 
+6999 21 ce ed		                LD      HL,RCVBUF_TOP 
+699c 16 00		                LD      D,0 
+699e 19			                ADD     HL,DE 
+699f 1c			                INC     E 
+69a0 7b			                LD      A,E 
+69a1 16 84		                LD      D,RCVBUF_BOTTOM - RCVBUF_TOP + 1 
+69a3 ba			                CP      D 
+69a4 20 04		                JR      NZ,IN_SIO_030 
+69a6 38 02		                JR      C,IN_SIO_030 
+69a8 1e 00		                LD      E,0 
+69aa			IN_SIO_030: 
+69aa 7b			                LD      A,E 
+69ab 32 2f f2		                LD      (RCVBUF_RPOS),A 
+69ae 7e			                LD      A,(HL) 
+69af 18 43		                JR      IN_SIO_100 
+69b1			; 
+69b1			IN_SIO_040: 
+69b1 db 21		                IN      A,(USARTCW) 
+69b3 57			                LD      D,A 
+69b4 e6 38		                AND     00111000B 
+69b6 20 07		                JR      NZ,IN_SIO_050 
+69b8 7a			                LD      A,D 
+69b9 e6 02		                AND     00000010B 
+69bb 20 35		                JR      NZ,IN_SIO_090 
+69bd 18 07		                JR      IN_SIO_060 
+69bf			IN_SIO_050: 
+69bf 3a 2b f2		                LD      A,(CTLWORD) 
+69c2 f6 10		                OR      00010000B 
+69c4 d3 21		                OUT     (USARTCW),A 
+69c6			IN_SIO_060: 
+69c6 0b			                DEC     BC 
+69c7 79			                LD      A,C 
+69c8 fe 00		                CP      0 
+69ca 20 ae		                JR      NZ,IN_SIO_010 
+69cc 78			                LD      A,B 
+69cd fe 00		                CP      0 
+69cf 20 a9		                JR      NZ,IN_SIO_010 
+69d1 2b			                DEC     HL 
+69d2 7d			                LD      A,L 
+69d3 fe 00		                CP      0 
+69d5 20 a3		                JR      NZ,IN_SIO_010 
+69d7 7c			                LD      A,H 
+69d8 fe 00		                CP      0 
+69da 20 9e		                JR      NZ,IN_SIO_010 
+69dc			IN_SIO_070: 
+69dc 3a ff f2		                LD      A,(FLGDATA) 
+69df f6 04		                OR      FLG_RCVTIMEOUT 
+69e1 32 ff f2		                LD      (FLGDATA),A 
+69e4 af			                XOR     A 
+69e5 18 0d		                JR      IN_SIO_100 
+69e7			IN_SIO_080: 
+69e7 3a ff f2		                LD      A,(FLGDATA) 
+69ea f6 08		                OR      FLG_RCVCANCEL 
+69ec 32 ff f2		                LD      (FLGDATA),A 
+69ef af			                XOR     A 
+69f0 18 02		                JR      IN_SIO_100 
+69f2			IN_SIO_090: 
+69f2 db 20		                IN      A,(USARTDW) 
+69f4			IN_SIO_100: 
+69f4 e1			                POP     HL 
+69f5 d1			                POP     DE 
+69f6 c1			                POP     BC 
+69f7 c9			                RET 
+69f8			; 
+69f8			; 
+69f8			; 
+69f8			OUT_SIO: 
+69f8 f5			                PUSH    AF 
+69f9			OUT_SIO_000: 
+69f9 db 21		                IN      A,(USARTCW) 
+69fb e6 01		                AND     00000001B 
+69fd 28 fa		                JR      Z,OUT_SIO_000 
+69ff f1			                POP     AF 
+6a00 d3 20		                OUT     (USARTDW),A 
+6a02 c9			                RET 
+6a03			; 
+6a03			; 
+6a03			; 
+6a03			SENDBUF_OUT: 
+6a03 21 ce ed		                LD      HL,SNDBUF_TOP 
+6a06			SENDBUF_OUT_000: 
+6a06 7e			                LD      A,(HL) 
+6a07 cd f8 69		                CALL    OUT_SIO 
+6a0a 23			                INC     HL 
+6a0b 10 f9		                DJNZ    SENDBUF_OUT_000 
+6a0d c9			                RET 
+6a0e			; 
+6a0e			; 
+6a0e			; 
+6a0e			RECVBUF_IN: 
+6a0e 78			                LD      A,B 
+6a0f 32 2e f2		                LD      (LFRECVCOUNT),A 
+6a12 21 ce ed		                LD      HL,RCVBUF_TOP 
+6a15			RECVBUF_IN_000: 
+6a15 cd 67 69		                CALL    IN_SIO 
+6a18 c5			                PUSH    BC 
+6a19 47			                LD      B,A 
+6a1a 3a ff f2		                LD      A,(FLGDATA) 
+6a1d e6 04		                AND     FLG_RCVTIMEOUT 
+6a1f 78			                LD      A,B 
+6a20 c1			                POP     BC 
+6a21 20 08		                JR      NZ,RECVBUF_IN_020                 
+6a23 77			                LD      (HL),A 
+6a24 fe 0a		                CP      LF 
+6a26 28 15		                JR      Z,RECVBUF_IN_030 
+6a28			RECVBUF_IN_010: 
+6a28 23			                INC     HL 
+6a29 18 ea		                JR      RECVBUF_IN_000 
+6a2b			RECVBUF_IN_020: 
+6a2b 3a 2e f2		                LD      A,(LFRECVCOUNT) 
+6a2e 4f			                LD      C,A 
+6a2f 78			                LD      A,B 
+6a30 b9			                CP      C 
+6a31 28 11		                JR      Z,RECVBUF_IN_040 
+6a33 3a ff f2		                LD      A,(FLGDATA) 
+6a36 e6 fb		                AND     ~FLG_RCVTIMEOUT 
+6a38 32 ff f2		                LD      (FLGDATA),A 
+6a3b 18 07		                JR      RECVBUF_IN_040 
+6a3d			RECVBUF_IN_030: 
+6a3d 05			                DEC     B 
+6a3e af			                XOR     A 
+6a3f b8			                CP      B 
+6a40 28 02		                JR      Z,RECVBUF_IN_040 
+6a42 18 e4		                JR      RECVBUF_IN_010 
+6a44			RECVBUF_IN_040: 
+6a44 c9			                RET 
+6a45			; 
+6a45			; 
+6a45			; 
+6a45			RECVBUF_CHK: 
+6a45 21 ce ed		                LD      HL,RCVBUF_TOP 
+6a48			RECVBUF_CHK_000: 
+6a48 1a			                LD      A,(DE) 
+6a49 be			                CP      (HL) 
+6a4a c2 60 67		                JP      NZ,SETCFRET 
+6a4d 23			                INC     HL 
+6a4e 13			                INC     DE 
+6a4f 10 f7		                DJNZ    RECVBUF_CHK_000 
+6a51 3e 3a		                LD      A,':' 
+6a53 be			                CP      (HL) 
+6a54 c2 60 67		                JP      NZ,SETCFRET 
+6a57 23			                INC     HL 
+6a58 c3 5d 67		                JP      CLRCFRET 
+6a5b			; 
+6a5b			; 
+6a5b			; 
+6a5b			MSG_DISP: 
+6a5b af			                XOR     A 
+6a5c 12			                LD      (DE),A 
+6a5d 32 49 eb		                LD      (OUTPUT_DEVICE),A 
+6a60 3c			                INC     A 
+6a61 32 64 ea		                LD      (CURSOR_XPOS),A 
+6a64 21 40 f2		                LD      HL,DISPBUF_TOP 
+6a67 cd ed 52		                CALL    ROM_MSGOUT 
+6a6a cd ca 5f		                CALL    ROM_DSPCRLF 
+6a6d c9			                RET 
+6a6e			; 
+6a6e			; D = 0 
+6a6e			; HL = E * A 
+6a6e			; 
+6a6e			MUL_88_2_16: 
+6a6e 16 00		                LD      D,0 
+6a70 21 00 00		                LD      HL,0 
+6a73 06 08		                LD      B,8 
+6a75			MUL_L000: 
+6a75 29			                ADD     HL,HL 
+6a76 87			                ADD     A,A 
+6a77 30 01		                JR      NC,MUL_000 
+6a79 19			                ADD     HL,DE 
+6a7a			MUL_000: 
+6a7a 10 f9		                DJNZ    MUL_L000 
+6a7c c9			                RET 
+6a7d			; 
+6a7d			; 
+6a7d			; 
+6a7d .. 00		ERR_MSG_000:    DB      "abort receive", 0 
+6a8b .. 00		ERR_MSG_001:    DB      "receive time out", 0 
+6a9c .. 00		ERR_MSG_002:    DB      "received command mismatch", 0 
+6ab6 .. 00		ERR_MSG_003:    DB      "ftp/spiffs get failed", 0 
+6acc .. 00		ERR_MSG_004:    DB      "load address not set", 0 
+6ae1 .. 00		ERR_MSG_005:    DB      "not support hardware", 0 
+6af6			TBL_EXT: 
+6af6 .. 00 01		TBL_EXT_BME:    DB      "BME",       0, 1 
+6afb eb 66		                DW      PARSER_EXT_BME 
+6afd cf 60		                DW      EXT_BME 
+6aff .. 93 00 02	TBL_EXT_FTPLIST:DB      "FTP", 93H,  0, 2       ; reserve code 93H : "LIST" 
+6b05 eb 66		                DW      PARSER_EXT_FTPLIST 
+6b07 76 61		                DW      EXT_FTPLIST 
+6b09 .. c7 00 03	TBL_EXT_FTPGET: DB      "FTP", 0C7H, 0, 3       ; reserve code C7H : "GET" 
+6b0f f7 66		                DW      PARSER_EXT_FTPGET 
+6b11 d0 62		                DW      EXT_FTPGET 
+6b13 .. 00 04		TBL_EXT_SNTP:   DB      "SNTP",      0, 4 
+6b19 eb 66		                DW      PARSER_EXT_SNTP 
+6b1b d1 64		                DW      EXT_SNTP 
+6b1d			TBL_EXT_SPIFFSLIST: 
+6b1d .. 93 00 05	                DB      "SPI", 93H,  0, 5    ; reserve code 93H : "LIST" 
+6b23 eb 66		                DW      PARSER_EXT_SPIFFSLIST 
+6b25 52 65		                DW      EXT_SPIFFSLIST 
+6b27			TBL_EXT_SPIFFSGET: 
+6b27 .. c7 00 06	                DB      "SPI", 0C7H, 0, 6    ; reserve code C7H : "GET" 
+6b2d f7 66		                DW      PARSER_EXT_FTPGET 
+6b2f 8c 65		                DW      EXT_SPIFFSGET 
+6b31 .. 00 07		TBL_EXT_VER:    DB      "VER",       0, 7 
+6b36 eb 66		                DW      PARSER_EXT_VER 
+6b38 df 65		                DW      EXT_VER 
+6b3a 00			                DB      0 
+6b3b			TBL_EXT_FTPLIST2: 
+6b3b ..			                DB      "FTPLIST" 
+6b42 ..			TBL_EXT_FTPGET2:DB      "FTPGET:" 
+6b49 ..			TBL_EXT_LIST:   DB      "LIST:" 
+6b4e			TBL_EXT_SPIFFSLIST2: 
+6b4e ..			                DB      "SPIFFSLIST" 
+6b58			TBL_EXT_SPIFFSGET2: 
+6b58 ..			                DB      "SPIFFSGET:" 
+6b62 .. 00		TBL_COUNT_MSG0: DB      "file count: ", 0 
+6b6f .. 00		TBL_TEMP_MSG0:  DB      "temp : ", 0 
+6b77 df 43 00		TBL_TEMP_MSG1:  DB      0DFH, "C", 0 
+6b7a .. 00		TBL_HUMI_MSG0:  DB      "humi : ", 0 
+6b82 .. 00		TBL_HUMI_MSG1:  DB      "%", 0 
+6b84 .. 00		TBL_PRESS_MSG0: DB      "press: ", 0 
+6b8c .. 00		TBL_PRESS_MSG1: DB      "hPa", 0 
+6b90 .. 00		TBL_ESP32_VER:  DB      "esp32 firmware v", 0 
+6ba1 .. 31 2e 30 2e 31 00	TBL_SIO_VER:    DB      "sio   firmware v", 30H + VER_MAJOR, ".", 30H + VER_MINOR, ".", 30H + VER_REVISION, 0 
+6bb7 0d 0a		TBL_CRLF:       DB      CR, LF 
+6bb9			                ;END 
+6bb9			 
 # End of file esp32pc8001sio.asm
-68f4			; 
-68f4			; 
-68f4			; 
-68f4			_USER_ROM_END: 
-68f4 0xff...		                DS      8192 - 4 - ( _USER_ROM_END - _USER_ROM_START ), 0FFH 
+6bb9			_PROG_END: 
+6bb9			; 
+6bb9			; 
+6bb9			; 
+6bb9			_USER_ROM_END: 
+6bb9 0xff...		                DS      8192 - 4 - ( _USER_ROM_END - _USER_ROM_START ), 0FFH 
 7ffc			; 
 7ffc c3 10 60		                JP      _MON_U_ENTRY 
 7fff ..			                DB      "U" 
