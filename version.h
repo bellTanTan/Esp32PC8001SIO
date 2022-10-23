@@ -8,6 +8,10 @@
  */
 
 // 更新履歴
+// 2022/10/10 v1.0.2 PC-8001mkIIにてRS-232C受信割込テーブル位置(8000H,8001H)を書換え
+//                   られるタイプのバイナリ受信処理対応(確認不足)
+//                   (cmt Planet Taizer:8000H~E7FFHが顕著)
+//                   多段ロード形式cmtファイル対応
 // 2022/10/01 v1.0.1 spiffs関連実装
 //                   PC-8001とPC-8001mkIIのboot判定とフックコマンドの切り替え
 //                   PC-8001mkII RS-232C 受信割込9600bps実装
@@ -23,4 +27,4 @@
 
 #define ESP32_PC8001SIO_VERSION_MAJOR     1
 #define ESP32_PC8001SIO_VERSION_MINOR     0
-#define ESP32_PC8001SIO_VERSION_REVISION  1
+#define ESP32_PC8001SIO_VERSION_REVISION  2

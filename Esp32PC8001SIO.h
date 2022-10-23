@@ -12,6 +12,7 @@
 #pragma GCC optimize ("O2")
 
 #include <Arduino.h>
+#include <stdarg.h>
 #include <time.h>
 #include <utime.h>
 #include <sys/time.h>
@@ -43,12 +44,19 @@
 #define CAN               0x18
 #define ESC               0x1B
 
+//#define _DEBUG
+
 #define SPIFFS_BASE_PATH                  "/spiffs"
 #define SPIFFS_FILE_DATETIME_LIST         "/fileDateTimeList.txt"
-//#define DEBUG
 
 #define ARRAY_SIZE( array )     ( (int)( sizeof( array ) / sizeof( (array)[0] ) ) )
 #define HLT                     { while ( 1 ) { delay( 500 ); } }
+
+#ifdef _DEBUG
+  extern  void _DEBUG_PRINT( const char * format, ... );
+#else
+  #define _DEBUG_PRINT( format, ... ) { }
+#endif // _DEBUG
 
 enum SIOCMD {
   cmdNon = 0,
@@ -61,6 +69,7 @@ enum SIOCMD {
   cmdTelnet,
   cmdSpiffsList,
   cmdSpiffsGet,
+  cmdGet,
   cmdEot,
   cmdAck,
   cmdNak,
@@ -89,6 +98,14 @@ typedef struct {
   char *  pszPath;
 } DIRLIST , *PDIRLIST;
 
+typedef struct {
+  int       dataType;
+  uint16_t  startAdrs;
+  uint16_t  endAdrs;
+  size_t    areaSize;
+  uint16_t  execAdrs;
+} DIVILIST, *PDIVILIST;
+
 // bme280Job.cpp
 extern  void bme280Main( void );
 
@@ -102,6 +119,7 @@ extern  void sioCmdList( void );
 extern  void sioCmdTelnet( void );
 extern  void sioCmdSpiffsList( void );
 extern  void sioCmdSpiffsGet( void );
+extern  void sioCmdGet( void );
 extern  void sioSendMain( void );
 extern  void sioRecvMain( void );
 
@@ -118,5 +136,5 @@ extern  void dumpSpiffsFileList( void );
 // etc.cpp
 extern  void getLocalTime( void );
 extern  void addFileList( const char * pFtpFileList );
-extern  uint16_t cmt2bin( int * pDataType );
+extern  bool cmt2bin( void );
 extern  bool telnetNegotiation( void );

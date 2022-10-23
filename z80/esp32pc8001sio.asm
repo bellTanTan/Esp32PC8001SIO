@@ -35,6 +35,10 @@
 ;
 ;********************************************************************************
 ; 更新履歴
+; 2022/10/10 v1.0.2 PC-8001mkIIにてRS-232C受信割込テーブル位置(8000H,8001H)を書換え
+;                   られるタイプのバイナリ受信処理対応(確認不足)
+;                   (cmt Planet Taizer:8000H~E7FFHが顕著)
+;                   多段ロード形式cmtファイル対応
 ; 2022/10/01 v1.0.1 spiffs関連実装
 ;                   PC-8001とPC-8001mkIIのboot判定とフックコマンドの切り替え
 ;                   PC-8001mkII RS-232C 受信割込9600bps実装
@@ -166,10 +170,13 @@ CURSOR_YPOS:    EQU     0EA63H
 CURSOR_XPOS:    EQU     0EA64H
 CRT_TEXT_COLS:  EQU     0EA65H
 CTL1_OUTDATA:   EQU     0EA66H
+FUNCKEY_FLAG:   EQU     0EA68H
 BCD_TIME_SEC:   EQU     0EA76H
-BCD_TIME_YEAR:  EQU     0EA7BH     
+BCD_TIME_YEAR:  EQU     0EA7BH
+FUNCKEY_DATA:   EQU     0EAC0H
 OUTPUT_DEVICE:  EQU     0EB49H
 BASAREA_TOP:    EQU     0EB54H
+FUNCKEY_PTR:    EQU     0EDC0H
 RS232C_CH1BUF:  EQU     0EDCEH                  ; AREA DS 128
 RS232C_CH2BUF:  EQU     0EE4EH                  ; AREA DS 128
 VARAREA_TOP:    EQU     0EFA0H
@@ -193,14 +200,17 @@ LOADSIZE:       EQU     0F222H                  ; WORD DW
 SAVESIOIRQ:     EQU     0F224H                  ; WORD DW
 ROM_WORKTOP:    EQU     0F226H                  ; WORD DW
 EXT_ENTRY:      EQU     0F228H                  ; WORD DW
-MODEWORD:       EQU     0F22AH                  ; BYTE DB
-CTLWORD:        EQU     0F22BH                  ; BYTE DB
-EXTNO:          EQU     0F22CH                  ; BYTE DB
-CHKBLKNO:       EQU     0F22DH                  ; BYTE DB
-LFRECVCOUNT:    EQU     0F22EH                  ; BYTE DB
-RCVBUF_RPOS:    EQU     0F22FH                  ; BYTE DB
-RCVBUF_WPOS:    EQU     0F230H                  ; BYTE DB
-SAVE_ENTRY:     EQU     0F231H                  ; AREA DS 3
+DIVICOUNT:      EQU     0F22AH                  ; WORD DW
+SELDIVINO:      EQU     0F22CH                  ; WORD DW
+EXECADRS2:      EQU     0F22EH                  ; WORD DW
+MODEWORD:       EQU     0F230H                  ; BYTE DB
+CTLWORD:        EQU     0F231H                  ; BYTE DB
+EXTNO:          EQU     0F232H                  ; BYTE DB
+CHKBLKNO:       EQU     0F233H                  ; BYTE DB
+LFRECVCOUNT:    EQU     0F234H                  ; BYTE DB
+RCVBUF_RPOS:    EQU     0F235H                  ; BYTE DB
+RCVBUF_WPOS:    EQU     0F236H                  ; BYTE DB
+SAVE_ENTRY:     EQU     0F237H                  ; AREA DS 3
 DISPBUF_TOP:    EQU     0F240H                  ; AREA DS
 FLGDATA:        EQU     0F2FFH                  ; BYTE DB       76543210
                                                 ;               |||||||+--- <CR><LF> first send
@@ -231,7 +241,7 @@ RCVBUF_BOTTOM:  EQU     RCVBUF_CHKSUM           ; BYTE DB
 ;
 VER_MAJOR:      EQU     1
 VER_MINOR:      EQU     0
-VER_REVISION:   EQU     1
+VER_REVISION:   EQU     2
 ;
                 ;ORG    0H
 ;
@@ -676,24 +686,16 @@ EXT_FTPGET_000:
                 INC     HL
                 INC     HL
                 LD      A,(HL)
-;
-                PUSH    AF
-                INC     HL
-                INC     HL
-                LD      B,4
-                LD      DE,0
+                AND     0FH
+                CP      0               ; ERROR
+                JP      Z,EXT_ERR3
+                CP      1               ; OK
+                JP      Z,EXT_FTPGET_010
+                JP      EXT_ERR2
 EXT_FTPGET_010:
-                LD      A,(HL)
-                PUSH    HL
-                EX      DE,HL
-                CALL    ROM_HEXASC2BIN
-                EX      DE,HL
-                POP     HL
                 INC     HL
-                DJNZ    EXT_FTPGET_010
-                LD      (LOADADRS),DE
                 INC     HL
-                LD      B,4
+                LD      B,3
                 LD      DE,0
 EXT_FTPGET_020:
                 LD      A,(HL)
@@ -704,9 +706,126 @@ EXT_FTPGET_020:
                 POP     HL
                 INC     HL
                 DJNZ    EXT_FTPGET_020
-                LD      (LOAD_ENDADRS),DE
+                LD      (DIVICOUNT),DE
+                LD      HL,0
+                CALL    ROM_CMPHLDE     ;         Z CY
+                                        ; HL<DE : 0  1
+                                        ; HL=DE : 1  0
+                                        ; HL>DE : 0  0
+                JP      Z,EXT_ERR2
+                INC     HL
+                CALL    ROM_CMPHLDE     ;         Z CY
+                                        ; HL<DE : 0  1
+                                        ; HL=DE : 1  0
+                                        ; HL>DE : 0  0
+                JR      Z,EXT_FTPGET_030
+                LD      DE,1
+                JR      EXT_FTPGET_040
+EXT_FTPGET_030:
+                LD      DE,0
+EXT_FTPGET_040:
+                LD      (SELDIVINO),DE
+EXT_FTPGET_050:
+                LD      HL,DISPBUF_TOP
+                LD      DE,(SELLISTNO)
+                LD      (BIN_ACC),DE
+                LD      BC,0
+                CALL    ROM_BIN2DECASC
+                LD      HL,DISPBUF_TOP + 5
+                LD      DE,(SELDIVINO)
+                LD      (BIN_ACC),DE
+                LD      BC,0
+                CALL    ROM_BIN2DECASC
+                LD      HL,TBL_EXT_GET
+                LD      DE,SNDBUF_TOP
+                LD      BC,4
+                LDIR
+                LD      HL,DISPBUF_TOP + 2
+                LD      BC,3
+                LDIR
+                LD      A,','
+                LD      (DE),A
+                INC     DE
+                LD      HL,DISPBUF_TOP + 7
+                LD      BC,3
+                LDIR
+                LD      HL,TBL_CRLF
+                LD      BC,2
+                LDIR
+                LD      B,13
+                CALL    SENDBUF_OUT
+                LD      B,1
+                CALL    RECVBUF_IN
+                LD      A,(FLGDATA)
+                AND     FLG_RCVTIMEOUT
+                JP      NZ,EXT_ERR1
+                LD      DE,TBL_EXT_GET
+                LD      B,3
+                CALL    RECVBUF_CHK
+                JP      C,EXT_ERR2
+                INC     HL
+                INC     HL
+                INC     HL
+                INC     HL
+                INC     HL
+                INC     HL
+                INC     HL
+                INC     HL
+                LD      A,(HL)          ; RESULT
+                AND     0FH
+                CP      0               ; ERROR
+                JP      Z,EXT_ERR3
+                CP      1               ; OK
+                JP      Z,EXT_FTPGET_060
+                JP      EXT_ERR2
+EXT_FTPGET_060:
+                INC     HL
+                INC     HL
+                LD      A,(HL)          ; DATA TYPE
+;
+                PUSH    AF
+                INC     HL
+                INC     HL
+                LD      B,4
+                LD      DE,0
+EXT_FTPGET_L010:
+                LD      A,(HL)
                 PUSH    HL
                 EX      DE,HL
+                CALL    ROM_HEXASC2BIN
+                EX      DE,HL
+                POP     HL
+                INC     HL
+                DJNZ    EXT_FTPGET_L010
+                LD      (LOADADRS),DE
+                INC     HL
+                LD      B,4
+                LD      DE,0
+EXT_FTPGET_L020:
+                LD      A,(HL)
+                PUSH    HL
+                EX      DE,HL
+                CALL    ROM_HEXASC2BIN
+                EX      DE,HL
+                POP     HL
+                INC     HL
+                DJNZ    EXT_FTPGET_L020
+                LD      (LOAD_ENDADRS),DE
+                INC     HL
+                LD      B,4
+                LD      DE,0
+EXT_FTPGET_L030:
+                LD      A,(HL)
+                PUSH    HL
+                EX      DE,HL
+                CALL    ROM_HEXASC2BIN
+                EX      DE,HL
+                POP     HL
+                INC     HL
+                DJNZ    EXT_FTPGET_L030
+                LD      (EXECADRS2),DE
+                PUSH    HL
+                LD      HL,(LOAD_ENDADRS)
                 LD      DE,(LOADADRS)
                 CALL    CLRCFRET
                 SBC     HL,DE
@@ -753,13 +872,13 @@ EXT_FTPGET_200:
                 LD      (FLGDATA),A
                 LD      A,1
                 LD      (CHKBLKNO),A
-EXT_FTPGET_L010:
+EXT_FTPGET_L040:
                 XOR     A
                 LD      (RCVBUF_RPOS),A
                 LD      (RCVBUF_WPOS),A
                 LD      A,NAK
                 CALL    OUT_SIO
-EXT_FTPGET_L020:
+EXT_FTPGET_L050:
                 CALL    IN_SIO
                 CP      EOT
                 JP      Z,EXT_FTPGET_310
@@ -767,12 +886,12 @@ EXT_FTPGET_L020:
                 JR      Z,EXT_FTPGET_210
                 LD      A,(FLGDATA)
                 AND     FLG_RCVTIMEOUT
-                JR      NZ,EXT_FTPGET_L010
+                JR      NZ,EXT_FTPGET_L040
                 LD      A,(FLGDATA)
                 AND     FLG_RCVCANCEL
                 JP      NZ,EXT_FTPGET_CANCEL
-                JR      EXT_FTPGET_L020
-EXT_FTPGET_L030:
+                JR      EXT_FTPGET_L050
+EXT_FTPGET_L060:
                 CALL    IN_SIO
                 CP      EOT
                 JP      Z,EXT_FTPGET_310
@@ -784,13 +903,13 @@ EXT_FTPGET_L030:
                 LD      A,(FLGDATA)
                 AND     FLG_RCVCANCEL
                 JP      NZ,EXT_FTPGET_CANCEL
-                JR      EXT_FTPGET_L030
+                JR      EXT_FTPGET_L060
 EXT_FTPGET_210:
                 CALL    CLR_RCVBUF
                 LD      (HL),A
                 INC     HL
                 LD      B,131
-EXT_FTPGET_L040:
+EXT_FTPGET_L070:
                 CALL    IN_SIO
                 LD      C,A
                 LD      A,(FLGDATA)
@@ -802,7 +921,7 @@ EXT_FTPGET_L040:
                 LD      A,C
                 LD      (HL),A
                 INC     HL
-                DJNZ    EXT_FTPGET_L040
+                DJNZ    EXT_FTPGET_L070
 ;
                 XOR     A
                 LD      (RCVBUF_RPOS),A
@@ -825,10 +944,30 @@ EXT_FTPGET_220:
                 POP     BC
                 POP     DE
                 CALL    CHK_MEMOVER
-                JR      C,EXT_FTPGET_CANCEL
+                JP      C,EXT_FTPGET_CANCEL
                 PUSH    BC
                 LD      HL,RCVBUF_DATA
+                DI
                 LDIR
+                LD      A,(FLGDATA)
+                AND     FLG_EXECPC8001
+                JR      NZ,EXT_FTPGET_240
+                PUSH    DE
+                PUSH    HL
+                LD      HL,SIOIRQ_ENTRY
+                LD      DE,(VECTOR_TBL_SIO)
+                CALL    ROM_CMPHLDE     ;         Z CY
+                                        ; HL<DE : 0  1
+                                        ; HL=DE : 1  0
+                                        ; HL>DE : 0  0
+                JR      Z,EXT_FTPGET_230
+                LD      (SAVESIOIRQ),DE
+                LD      (VECTOR_TBL_SIO),HL
+EXT_FTPGET_230:
+                POP     HL
+                POP     DE
+EXT_FTPGET_240:
+                EI
                 POP     BC
                 CALL    DISP_PROGRESS
                 LD      HL,(LOADSIZE)
@@ -840,33 +979,19 @@ EXT_FTPGET_220:
                 CALL    OUT_SIO        
                 LD      HL,CHKBLKNO
                 INC     (HL)
-                JP      EXT_FTPGET_L030
+                JP      EXT_FTPGET_L060
 EXT_FTPGET_300:
                 CALL    ENABLE_RTS
                 LD      A,NAK
                 CALL    OUT_SIO        
-                JP      EXT_FTPGET_L030
+                JP      EXT_FTPGET_L060
 EXT_FTPGET_310:
                 LD      A,ACK
                 CALL    OUT_SIO
-                LD      A,1
-                CALL    TERM_SIO
-                POP     HL
                 LD      A,(FLGDATA)
                 AND     FLG_LOADBAS
-                JR      NZ,EXT_FTPGET_FIXBAS
-                PUSH    HL
-                LD      HL,0
-                LD      DE,(EXECADRS)
-                CALL    ROM_CMPHLDE     ;         Z CY
-                                        ; HL<DE : 0  1
-                                        ; HL=DE : 1  0
-                                        ; HL>DE : 0  0
-                POP     HL
-                JP      Z,EXT_EXIT
-                JP      EXT_DLEXEC_EXIT
+                JR      Z,EXT_FTPGET_320
 EXT_FTPGET_FIXBAS:
-                PUSH    HL
                 PUSH    DE
                 LD      HL,(LOADADRS)
                 EX      DE,HL
@@ -877,10 +1002,73 @@ EXT_FTPGET_FIXBAS:
                 XOR     A
                 CPDR
                 INC     HL
+                LD      (HL),A
                 INC     HL
+                LD      (HL),A
                 LD      (VARAREA_TOP),  HL
                 LD      (ARRAYAREA_TOP),HL
                 LD      (FREEAREA_TOP), HL
+EXT_FTPGET_320:
+                LD      HL,(SELDIVINO)
+                INC     HL
+                LD      (SELDIVINO),HL
+                LD      DE,(DIVICOUNT)
+                CALL    ROM_CMPHLDE     ;         Z CY
+                                        ; HL<DE : 0  1
+                                        ; HL=DE : 1  0
+                                        ; HL>DE : 0  0
+                JR      Z,EXT_FTPGET_340
+                CALL    ROM_DSPCRLF
+                CALL    ROM_TIMEREAD
+                LD      A,(BCD_TIME_SEC)
+                LD      D,A
+EXT_FTPGET_330:
+                PUSH    DE
+                CALL    ROM_TIMEREAD
+                POP     DE
+                LD      A,(BCD_TIME_SEC)
+                CP      D
+                JR      Z,EXT_FTPGET_330
+                JP      EXT_FTPGET_050
+EXT_FTPGET_340:
+                LD      A,1
+                CALL    TERM_SIO
+                POP     HL
+                PUSH    HL
+                LD      HL,0
+                LD      DE,(EXECADRS)
+                CALL    ROM_CMPHLDE     ;         Z CY
+                                        ; HL<DE : 0  1
+                                        ; HL=DE : 1  0
+                                        ; HL>DE : 0  0
+                POP     HL
+                JR      Z,EXT_FTPGET_350
+                JP      EXT_DLEXEC_EXIT
+EXT_FTPGET_350:
+                PUSH    HL
+                LD      HL,0
+                LD      DE,(EXECADRS2)
+                CALL    ROM_CMPHLDE     ;         Z CY
+                                        ; HL<DE : 0  1
+                                        ; HL=DE : 1  0
+                                        ; HL>DE : 0  0
+                POP     HL
+                JP      Z,EXT_EXIT
+                LD      A,(FLGDATA)
+                AND     FLG_LOADBAS
+                JP      NZ,EXT_FTPGET_360
+                LD      (EXECADRS),DE
+                JP      EXT_DLEXEC_EXIT
+EXT_FTPGET_360:
+                PUSH    HL
+                LD      HL,TBL_RUN
+                LD      DE,FUNCKEY_DATA
+                LD      BC,5
+                LDIR
+                LD      HL,FUNCKEY_DATA
+                LD      (FUNCKEY_PTR),HL
+                LD      HL,FUNCKEY_FLAG
+                LD      (HL),1
                 POP     HL
                 JP      EXT_EXIT
 EXT_FTPGET_CANCEL:
@@ -1902,10 +2090,12 @@ TBL_EXT_FTPLIST2:
                 DB      "FTPLIST"
 TBL_EXT_FTPGET2:DB      "FTPGET:"
 TBL_EXT_LIST:   DB      "LIST:"
+TBL_EXT_GET:    DB      "GET:"
 TBL_EXT_SPIFFSLIST2:
                 DB      "SPIFFSLIST"
 TBL_EXT_SPIFFSGET2:
                 DB      "SPIFFSGET:"
+TBL_RUN:        DB      "RUN", 0DH, 0
 TBL_COUNT_MSG0: DB      "file count: ", 0
 TBL_TEMP_MSG0:  DB      "temp : ", 0
 TBL_TEMP_MSG1:  DB      0DFH, "C", 0

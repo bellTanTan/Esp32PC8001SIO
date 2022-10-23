@@ -14,18 +14,19 @@ extern  const char * telnetServer;
 extern  const int telnetPort;
 
 extern  ESP32_FTPClient ftp;
-extern  String  ftpList[128];
+extern  String      ftpList[128];
 extern  WiFiClient  telnetClient;
 extern  int         selectFileListNo;
+extern  int         selectDivisionNo;
 extern  bool        fileListFtpFlag;
 extern  int         fileListCount;
 extern  PFILELIST   pFileList;
 extern  int         spiffsDirListCount;
 extern  PDIRLIST    pSpiffsDirList;
+extern  int         diviListCount;
+extern  PDIVILIST   pDiviList;
 extern  int         ftpFileBufSize;
 extern  uint8_t *   ftpFileBuf;
-extern  int         binBufSize;
-extern  int         binBufOffset;
 extern  uint8_t *   binBuf;
 extern  struct tm * localTime;
 extern  BME280DATA  bme280Data;
@@ -152,9 +153,8 @@ void sioCmdFtpGet( void )
   sioSendCmd = sioRecvCmd;
   sioRecvCmd = cmdNon;
   memset( sioSendBuf, 0, sizeof( sioSendBuf ) );
-  sprintf( sioSendBuf, "FTPGET:%03d,%d,%04X,%04X%c%c",
+  sprintf( sioSendBuf, "FTPGET:%03d,%d,%03d%c%c",
            selectFileListNo,
-           0,
            0,
            0,
            CR, LF );
@@ -172,7 +172,6 @@ void sioCmdFtpGet( void )
         char * fileName = pFileList[selectFileListNo].szName;
         memset( ftpFileBuf, 0, fileSize );
         int result = 0;
-        uint16_t loadAdrs = 0;
         ftp.OpenConnection();
         if ( ftp.isConnected() )
         {
@@ -181,27 +180,14 @@ void sioCmdFtpGet( void )
           ftp.DownloadFile( fileName, ftpFileBuf, fileSize, false );
           ftp.CloseConnection();
           ftpFileBufSize = fileSize;
-          binBufSize     = fileSize;
-          if ( !binBuf )
-            binBuf = (uint8_t *)malloc( binBufSize );
-          else
-            binBuf = (uint8_t *)realloc( binBuf, binBufSize );
-          char * p = strrchr( fileName, '.' );
-          if ( binBuf && p )
-          {
-            binBufOffset = 0;
-            result = 1;
-            memcpy( binBuf, ftpFileBuf, ftpFileBufSize );
-            if ( strcasecmp( p, ".CMT" ) == 0 )
-              loadAdrs = cmt2bin( &result );
-          }
+          if ( binBuf )
+            result = cmt2bin();
         }
         memset( sioSendBuf, 0, sizeof( sioSendBuf ) );
-        sprintf( sioSendBuf, "FTPGET:%03d,%d,%04X,%04X%c%c",
+        sprintf( sioSendBuf, "FTPGET:%03d,%d,%03d%c%c",
                  selectFileListNo,
                  result,
-                 loadAdrs,
-                 loadAdrs + binBufSize - 1,
+                 diviListCount,
                  CR, LF );
       }
     }
@@ -298,9 +284,8 @@ void sioCmdSpiffsGet( void )
   sioSendCmd = sioRecvCmd;
   sioRecvCmd = cmdNon;
   memset( sioSendBuf, 0, sizeof( sioSendBuf ) );
-  sprintf( sioSendBuf, "SPIFFSGET:%03d,%d,%04X,%04X%c%c",
+  sprintf( sioSendBuf, "SPIFFSGET:%03d,%d,%03d%c%c",
            selectFileListNo,
-           0,
            0,
            0,
            CR, LF );
@@ -318,7 +303,6 @@ void sioCmdSpiffsGet( void )
         char * fileName = pFileList[selectFileListNo].szName;
         memset( ftpFileBuf, 0, fileSize );
         int result = 0;
-        uint16_t loadAdrs = 0;
         char szPath[512];
         sprintf( szPath, "%s/%s", SPIFFS_BASE_PATH, fileName );
         auto fp = fopen( szPath, "r" );
@@ -329,31 +313,46 @@ void sioCmdSpiffsGet( void )
           if ( fsize == fileSize )
           {
             ftpFileBufSize = fileSize;
-            binBufSize     = fileSize;
-            if ( !binBuf )
-              binBuf = (uint8_t *)malloc( binBufSize );
-            else
-              binBuf = (uint8_t *)realloc( binBuf, binBufSize );
-            char * p = strrchr( fileName, '.' );
-            if ( binBuf && p )
-            {
-              binBufOffset = 0;
-              result = 1;
-              memcpy( binBuf, ftpFileBuf, ftpFileBufSize );
-              if ( strcasecmp( p, ".CMT" ) == 0 )
-                loadAdrs = cmt2bin( &result );
-            }
+            if ( binBuf )
+              result = cmt2bin();
           }
         }
         memset( sioSendBuf, 0, sizeof( sioSendBuf ) );
-        sprintf( sioSendBuf, "SPIFFSGET:%03d,%d,%04X,%04X%c%c",
+        sprintf( sioSendBuf, "SPIFFSGET:%03d,%d,%03d%c%c",
                  selectFileListNo,
                  result,
-                 loadAdrs,
-                 loadAdrs + binBufSize - 1,
+                 diviListCount,
                  CR, LF );
       }
     }
+  }
+}
+
+void sioCmdGet( void )
+{
+  sioSendCmd = sioRecvCmd;
+  sioRecvCmd = cmdNon;
+  memset( sioSendBuf, 0, sizeof( sioSendBuf ) );
+  sprintf( sioSendBuf, "GET:%03d,%03d,%d,%d,%04X,%04X,%04X%c%c",
+           selectFileListNo,
+           selectDivisionNo,
+           0,
+           0,
+           0,
+           0,
+           0,
+           CR, LF );
+  if ( selectDivisionNo >= 0 && selectDivisionNo < diviListCount )
+  {
+    sprintf( sioSendBuf, "GET:%03d,%03d,%d,%d,%04X,%04X,%04X%c%c",
+             selectFileListNo,
+             selectDivisionNo,
+             1,
+             pDiviList[selectDivisionNo].dataType,
+             pDiviList[selectDivisionNo].startAdrs,
+             pDiviList[selectDivisionNo].endAdrs,
+             pDiviList[selectDivisionNo].execAdrs,
+             CR, LF );
   }
 }
 
@@ -388,6 +387,9 @@ static void sioRecvCommand( void )
     case cmdSpiffsGet:
       sioCmdSpiffsGet();
       break;
+    case cmdGet:
+      sioCmdGet();
+      break;
   }
 }
 
@@ -414,14 +416,17 @@ static void sioRecvParser( void )
       case ACK:
         sioRecvCmd = cmdAck;
         sioRecvBufByte = 0;
+        _DEBUG_PRINT( "%s(%d) sioRecvCmd(%d)\r\n", __func__, __LINE__, sioRecvCmd );
         break;
       case NAK:
         sioRecvCmd = cmdNak;
         sioRecvBufByte = 0;
+        _DEBUG_PRINT( "%s(%d) sioRecvCmd(%d)\r\n", __func__, __LINE__, sioRecvCmd );
         break;
       case CAN:
         sioRecvCmd = cmdCan;
         sioRecvBufByte = 0;
+        _DEBUG_PRINT( "%s(%d) sioRecvCmd(%d)\r\n", __func__, __LINE__, sioRecvCmd );
         break;
     }
   }
@@ -430,7 +435,17 @@ static void sioRecvParser( void )
     if ( sioRecvBuf[sioRecvBufByte-2] == CR
       && sioRecvBuf[sioRecvBufByte-1] == LF )
     {
-      sioRecvBuf[sioRecvBufByte-2] = 0x00;
+      _DEBUG_PRINT( "%s(%d) sioRecvBufByte(%d)\r\n", __func__, __LINE__, sioRecvBufByte );
+      char dumpBuf[1024];
+      memset( dumpBuf, 0, sizeof( dumpBuf ) );      
+      for ( int i = 0; i < sioRecvBufByte; i++ )
+      {
+        char buf[16];
+        sprintf( buf, "%02X ", sioRecvBuf[i] );
+        strcat( dumpBuf, buf );
+      }
+      _DEBUG_PRINT( "%s(%d) sioRecvBuf[] %s\r\n", __func__, __LINE__, dumpBuf );
+
       char *psioRecvBuf = &sioRecvBuf[0];
       // uPD8251電源ON時のゴミ送出除外
       for ( int i = 0; i < sioRecvBufByte; i++ )
@@ -443,6 +458,9 @@ static void sioRecvParser( void )
           break;
         }
       }
+      sioRecvBuf[sioRecvBufByte-2] = 0x00;
+      _DEBUG_PRINT( "%s(%d) psioRecvBuf %s\r\n", __func__, __LINE__, psioRecvBuf );
+
       sioRecvCmd = cmdNon;
       if ( strcmp( psioRecvBuf, "VER" ) == 0 )
         sioRecvCmd = cmdVer;
@@ -459,7 +477,7 @@ static void sioRecvParser( void )
         selectFileListNo     = atoi( &psioRecvBuf[5] );
         sioRecvCmd = cmdList;
       }
-      if ( strncmp( sioRecvBuf, "FTPGET:", 7 ) == 0 )
+      if ( strncmp( psioRecvBuf, "FTPGET:", 7 ) == 0 )
       {
         //            1
         // 0123456789 0   1
@@ -467,19 +485,19 @@ static void sioRecvParser( void )
         selectFileListNo = atoi( &psioRecvBuf[7] );
         sioRecvCmd = cmdFtpGet;
       }
-      if ( strncmp( sioRecvBuf, "TELNET:", 7 ) == 0 )
+      if ( strncmp( psioRecvBuf, "TELNET:", 7 ) == 0 )
       {
         //           1
         // 012345678901 2   3
         // TELNET:xx,yy<CR><LF>
-        sioRecvBuf[9] = 0x00;
+        psioRecvBuf[9] = 0x00;
         termWidth = atoi( &psioRecvBuf[7] );
         termHeigh = atoi( &psioRecvBuf[10] );
         sioRecvCmd = cmdTelnet;
       }
       if ( strcmp( psioRecvBuf, "SPIFFSLIST" ) == 0 )
         sioRecvCmd = cmdSpiffsList;
-      if ( strncmp( sioRecvBuf, "SPIFFSGET:", 10 ) == 0 )
+      if ( strncmp( psioRecvBuf, "SPIFFSGET:", 10 ) == 0 )
       {
         //           1
         // 0123456789012 0   1
@@ -487,6 +505,17 @@ static void sioRecvParser( void )
         selectFileListNo = atoi( &psioRecvBuf[10] );
         sioRecvCmd = cmdSpiffsGet;
       }
+      if ( strncmp( psioRecvBuf, "GET:", 4 ) == 0 )
+      {
+        //           1
+        // 01234567890 1   2
+        // GET:nnn,nnn<CR><LF>
+        psioRecvBuf[7] = 0x00;
+        selectFileListNo = atoi( &psioRecvBuf[4] );
+        selectDivisionNo = atoi( &psioRecvBuf[8] );
+        sioRecvCmd = cmdGet;
+      }
+      _DEBUG_PRINT( "%s(%d) sioRecvCmd(%d)\r\n", __func__, __LINE__, sioRecvCmd );
       sioRecvBufByte = 0;
     }
   }

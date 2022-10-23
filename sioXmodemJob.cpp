@@ -9,6 +9,9 @@
 
 #include "Esp32PC8001SIO.h"
 
+extern  int         selectDivisionNo;
+extern  int         diviListCount;
+extern  PDIVILIST   pDiviList;
 extern  int         binBufSize;
 extern  int         binBufOffset;
 extern  uint8_t *   binBuf;
@@ -33,8 +36,8 @@ void sioXmodemSendMain( void )
         sioRecvCmd      = cmdNon;
         xmodemSeqNo     = 10;
         xmodemBlockNo   = 1;
-        xmodemSendBytes = binBufSize;
-        binBufOffset    = 0;
+        xmodemSendBytes = pDiviList[selectDivisionNo].areaSize;
+        binBufOffset    = pDiviList[selectDivisionNo].startAdrs;
       }
       break;
     case 10:

@@ -12,10 +12,10 @@
 extern  WiFiClient  telnetClient;
 extern  int         fileListCount;
 extern  PFILELIST   pFileList;
+extern  int         diviListCount;
+extern  PDIVILIST   pDiviList;
 extern  int         ftpFileBufSize;
 extern  uint8_t *   ftpFileBuf;
-extern  int         binBufSize;
-extern  int         binBufOffset;
 extern  uint8_t *   binBuf;
 extern  time_t      timeNow;
 extern  struct tm * localTime;
@@ -52,7 +52,7 @@ void addFileList( const char * pFtpFileList )
   char * p = strtok( (char *)pFtpFileList, szDelimiter );
   size_t n = 0;
   int item = 0;
-  while( p )
+  while ( p )
   {
     switch ( item )
     {
@@ -113,72 +113,191 @@ void addFileList( const char * pFtpFileList )
   fileListCount++;
 }
 
-uint16_t cmt2bin( int * pDataType )
+bool cmt2bin( void )
 {
+  int ftpBufOffset = 0;
   uint16_t loadAdrs = 0;
-  bool fBasCmt = ( ( ftpFileBuf[0] == 0xD3 ) ? true : false );
-  bool fMonCmt = ( ( ftpFileBuf[0] == 0x3A ) ? true : false );
-  if ( fBasCmt )
+  uint16_t endAdrs = 0;
+  diviListCount = 0;
+  while ( true )
   {
-    bool fHead = false;
-    bool fEnd = false;
-    if ( ftpFileBufSize > ( 10 + 6 + 9 ) )
+    int dataType = 0;
+    if ( ftpBufOffset >= ftpFileBufSize )
+      break;
+    bool fBasCmt = ( ( ftpFileBuf[ftpBufOffset] == 0xD3 ) ? true : false );
+    bool fMonCmt = ( ( ftpFileBuf[ftpBufOffset] == 0x3A ) ? true : false );
+    if ( fBasCmt == false && fMonCmt == false )
     {
-      uint8_t buf[16];
-      memset( buf, 0xD3, 10 );
-      fHead = ( memcmp( ftpFileBuf, buf, 10 ) == 0 ? true : false );
-      memset( buf, 0x00, 9 );
-      int p = ftpFileBufSize - 9;
-      fEnd = ( memcmp( &ftpFileBuf[p], buf, 9 ) == 0 ? true : false );
+      if ( ftpBufOffset == 0 )
+      {
+        dataType = 1;
+        loadAdrs = 0;
+        endAdrs  = ftpFileBufSize;
+        size_t dataSize = endAdrs - loadAdrs;
+        memcpy( &binBuf[loadAdrs], &ftpFileBuf[ftpBufOffset], dataSize );
+        ftpBufOffset += ( endAdrs + 1 );
+      }
+      else
+      {
+        ftpBufOffset++;
+      }
     }
-    if ( fHead && fEnd )
+    if ( fBasCmt )
     {
-      binBufSize = ftpFileBufSize - ( 10 + 6 + 8 );
-      memcpy( binBuf, &ftpFileBuf[16], binBufSize );
-      *pDataType = 2;
+      if ( ftpFileBufSize > ( 10 + 6 + 9 ) )
+      {
+        int startOffset = 0;
+        uint8_t buf[16];
+        loadAdrs = 0;
+        memset( buf, 0xD3, 10 );
+        bool fHead = ( memcmp( &ftpFileBuf[ftpBufOffset], buf, 10 ) == 0 ? true : false );
+        if ( fHead )
+        {
+          ftpBufOffset += ( 10 + 6 );
+          startOffset = ftpBufOffset;
+        }
+        while ( fHead )
+        {
+          if ( ftpBufOffset >= ftpFileBufSize )
+          {
+            fHead = false;
+            break;
+          }
+          if ( ftpFileBuf[ftpBufOffset+0] == 0x00
+            && ftpFileBuf[ftpBufOffset+1] == 0x00
+            && ftpFileBuf[ftpBufOffset+2] == 0x00 )
+          {
+            ftpBufOffset += 3;
+            break;
+          }
+          ftpBufOffset++;
+        }
+        if ( fHead )
+        {
+          memset( buf, 0x00, 9 );
+          bool fEnd = ( memcmp( &ftpFileBuf[ftpBufOffset], buf, 9 ) == 0 ? true : false );
+          if ( fEnd )
+          {
+            dataType = 2;
+            loadAdrs = 0x21 | ( ftpFileBuf[startOffset+1] << 8 );
+            endAdrs  = loadAdrs + ( ftpBufOffset - startOffset );
+            size_t dataSize = endAdrs - loadAdrs;
+            memcpy( &binBuf[loadAdrs], &ftpFileBuf[startOffset], dataSize );
+            ftpBufOffset += 9;
+          }
+        }
+      }
     }
-  }
-  if ( fMonCmt )
-  {
-    int binBufOffset = 0;
-    int ftpFileBufOffset = 0;
-    while ( true )
+    if ( fMonCmt )
     {
-      if ( ftpFileBufOffset >= ftpFileBufSize )
-        break;
-      if ( ftpFileBuf[ftpFileBufOffset+0] == 0x3A )
-        binBufOffset = 0;  
-      loadAdrs  = (uint16_t)ftpFileBuf[ftpFileBufOffset+1] << 8;
-      loadAdrs |= (uint16_t)ftpFileBuf[ftpFileBufOffset+2];
-      ftpFileBufOffset += 4;
+      loadAdrs  = (uint16_t)ftpFileBuf[ftpBufOffset+1] << 8;
+      loadAdrs |= (uint16_t)ftpFileBuf[ftpBufOffset+2];
+      endAdrs   = loadAdrs;
+      ftpBufOffset += 4;
       while ( true )
       {
-        if ( ftpFileBuf[ftpFileBufOffset+0] == 0x3A
-          && ftpFileBuf[ftpFileBufOffset+1] == 0x00
-          && ftpFileBuf[ftpFileBufOffset+2] == 0x00 )
+        if ( ftpFileBuf[ftpBufOffset+0] == 0x3A
+          && ftpFileBuf[ftpBufOffset+1] == 0x00
+          && ftpFileBuf[ftpBufOffset+2] == 0x00 )
         {
-          ftpFileBufOffset += 3;
-          *pDataType = 3;
+          ftpBufOffset += 3;
+          dataType = 3;
           break;
         }
-        if ( ftpFileBuf[ftpFileBufOffset+0] == 0x3A )
+        if ( ftpFileBuf[ftpBufOffset+0] == 0x3A )
         {
-          uint8_t dataSize = ftpFileBuf[ftpFileBufOffset+1];
-          memcpy( &binBuf[binBufOffset], &ftpFileBuf[ftpFileBufOffset+2], dataSize );
-          binBufOffset += dataSize;
-          ftpFileBufOffset += ( 3 + dataSize );
+          uint8_t dataSize = ftpFileBuf[ftpBufOffset+1];
+          memcpy( &binBuf[endAdrs], &ftpFileBuf[ftpBufOffset+2], dataSize );
+          endAdrs += dataSize;
+          ftpBufOffset += ( 3 + dataSize );
         }
         else
         {
-          ftpFileBufOffset = ftpFileBufSize;
           break;
         }
       }
     }
-    if ( *pDataType == 3 )
-      binBufSize = binBufOffset;
+    if ( dataType != 0 )
+    {
+      size_t dataSize = sizeof( *pDiviList ) * ( diviListCount + 1 );
+      if ( !pDiviList )
+        pDiviList = (PDIVILIST)malloc( dataSize );
+      else
+        pDiviList = (PDIVILIST)realloc( pDiviList, dataSize );
+      if ( !pDiviList )
+        return false;
+      pDiviList[diviListCount].dataType  = dataType;
+      pDiviList[diviListCount].startAdrs = loadAdrs;
+      pDiviList[diviListCount].endAdrs   = endAdrs - 1;
+      pDiviList[diviListCount].areaSize  = pDiviList[diviListCount].endAdrs - pDiviList[diviListCount].startAdrs + 1;
+      pDiviList[diviListCount].execAdrs  = 0;
+      diviListCount++;
+    }
   }
-  return loadAdrs;
+
+  if ( diviListCount > 0 )
+  {
+    // Adrs : +0 +1 +2 +3 +4 +5 +6 +7 +8 +9 +A +B +C +D +E +F
+    // 0000 : 01 00 00 40 00 00 00 00 00 00 00 00 00 00 00 00
+    // 0010 : 00 01 01 79 09 00 00 00 00 00 00 00 00 00 00 00
+    // 0020 : 00 00 00 00 61 75 74 6F 20 00 00 00 00 00 00 00
+    // 0030 : 00 00 00 00 67 6F 20 74 6F 20 00 00 00 00 00 00
+    // 0040 : 00 00 00 00 6C 69 73 74 20 00 00 00 00 00 00 00
+    // 0050 : 00 00 00 00 72 75 6E 0D 4C 0D 4C 0D 67 38 30 34
+    // 0060 : 30 0D 00
+    if ( pDiviList[0].dataType == 3 && pDiviList[0].startAdrs == 0xEA68 )
+    {
+      uint16_t checkAdrs = pDiviList[0].startAdrs + 0x57;
+      if ( binBuf[checkAdrs] == 0x0D )
+      {
+        checkAdrs++;
+        size_t dataSize = pDiviList[0].endAdrs - checkAdrs + 1;
+        if ( dataSize > 0 )
+        {
+          char * fkey5Buf = (char *)malloc( dataSize );
+          if ( fkey5Buf )
+          {
+            memset( fkey5Buf, 0, dataSize );
+            memcpy( fkey5Buf, &binBuf[checkAdrs], dataSize );
+            char szDelimiter[16];
+            sprintf( szDelimiter, "%c", CR );
+            char * p = strtok( fkey5Buf, szDelimiter );
+            int item = 0;
+            while ( p )
+            {
+              if ( p[0] == 'g' || p[0] == 'G' )
+              {
+                int execAdrs;
+                sscanf( &p[1], "%x", &execAdrs );
+                if ( item >= 0 && item < diviListCount )
+                  pDiviList[item].execAdrs = execAdrs;
+              }
+              if ( strcasecmp( p, "RUN" ) == 0 )
+              {
+                if ( item >= 0 && item < diviListCount )
+                  pDiviList[item].execAdrs = pDiviList[item].startAdrs;
+              }
+              p = strtok( NULL, szDelimiter );
+              item++;
+            }
+            free( fkey5Buf );
+          }
+        }
+      }
+    }
+  }
+
+  _DEBUG_PRINT( "%s(%d) diviListCount %d\r\n", __func__, __LINE__, diviListCount );
+  for ( int i = 0; i < diviListCount; i++ )
+  {
+    _DEBUG_PRINT( "%s(%d) pDiviList[%d].dataType  %d\r\n",     __func__, __LINE__, i, pDiviList[i].dataType );
+    _DEBUG_PRINT( "%s(%d) pDiviList[%d].startAdrs 0x%04X\r\n", __func__, __LINE__, i, pDiviList[i].startAdrs );
+    _DEBUG_PRINT( "%s(%d) pDiviList[%d].endAdrs   0x%04X\r\n", __func__, __LINE__, i, pDiviList[i].endAdrs );
+    _DEBUG_PRINT( "%s(%d) pDiviList[%d].areaSize  %d\r\n",     __func__, __LINE__, i, pDiviList[i].areaSize );
+    _DEBUG_PRINT( "%s(%d) pDiviList[%d].execAdrs  0x%04X\r\n", __func__, __LINE__, i, pDiviList[i].execAdrs );
+  }
+
+  return true;
 }
 
 bool telnetNegotiation( void )
@@ -329,3 +448,21 @@ bool telnetNegotiation( void )
   }
   return result;
 }
+
+#ifdef _DEBUG
+void _DEBUG_PRINT( const char * format, ... )
+{
+  va_list ap;
+  va_start( ap, format );
+  int size = vsnprintf( NULL, 0, format, ap ) + 1;
+  if ( size > 0 )
+  {
+    va_end( ap );
+    va_start( ap, format );
+    char buf[size + 1];
+    vsnprintf( buf, size, format, ap );
+    Serial.printf( "%s", buf );
+  }
+  va_end( ap );
+}
+#endif // _DEBUG

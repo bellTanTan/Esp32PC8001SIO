@@ -53,11 +53,14 @@ String  ftpList[128];
 
 WiFiClient  telnetClient;
 int         selectFileListNo;
+int         selectDivisionNo;
 bool        fileListFtpFlag;
 int         fileListCount;
 PFILELIST   pFileList;
 int         spiffsDirListCount;
 PDIRLIST    pSpiffsDirList;
+int         diviListCount;
+PDIVILIST   pDiviList;
 int         ftpFileBufSize;
 uint8_t *   ftpFileBuf;
 int         binBufSize;
@@ -111,6 +114,13 @@ void initApp( void )
     Serial.printf( "spiffs file datetime update failed\r\n" );
     HLT;
   }
+  binBufSize   = 65536;
+  binBufOffset = 0;
+  if ( !binBuf )
+    binBuf = (uint8_t *)malloc( binBufSize );
+  else
+    binBuf = (uint8_t *)realloc( binBuf, binBufSize );
+  memset( binBuf, 0, binBufSize );
 
   Serial.printf( "init bme280\r\n" );
   if ( !bme.begin( BME280_I2C_ADRS ) )
@@ -174,13 +184,14 @@ void initApp( void )
   dumpSpiffsFileList();
 
   selectFileListNo   = 0;
+  selectDivisionNo   = 0;
   fileListFtpFlag    = false;
   fileListCount      = 0;
   pFileList          = NULL;
+  diviListCount      = 0;
+  pDiviList          = NULL;
   ftpFileBufSize     = 0;
   ftpFileBuf         = NULL;
-  binBufSize         = 0;
-  binBufOffset       = 0;
   bmeGetOldSec       = -1;
   xmodemSeqNo        = 0;
   xmodemBlockNo      = 0;
