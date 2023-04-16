@@ -35,6 +35,7 @@
 ;
 ;********************************************************************************
 ; 更新履歴
+; 2022/12/10 v1.0.3 cmd sntp or mat sntp で月が正しく定義出来ない不具合改修(確認不足)
 ; 2022/10/10 v1.0.2 PC-8001mkIIにてRS-232C受信割込テーブル位置(8000H,8001H)を書換え
 ;                   られるタイプのバイナリ受信処理対応(確認不足)
 ;                   (cmt Planet Taizer:8000H~E7FFHが顕著)
@@ -241,7 +242,7 @@ RCVBUF_BOTTOM:  EQU     RCVBUF_CHKSUM           ; BYTE DB
 ;
 VER_MAJOR:      EQU     1
 VER_MINOR:      EQU     0
-VER_REVISION:   EQU     2
+VER_REVISION:   EQU     3
 ;
                 ;ORG    0H
 ;
@@ -1140,8 +1141,10 @@ EXT_SNTP_L000:
                 SRA     A
                 SRA     A
                 SRA     A
-                LD      E,10                
+                LD      E,10
+                PUSH    BC
                 CALL    MUL_88_2_16
+                POP     BC
                 LD      A,B
                 AND     0FH
                 ADD     A,L

@@ -26,6 +26,7 @@
 #include <ESP32_FTPClient.h>
 #include "version.h"
 
+#include <sys/time.h>
 #define SIO_TXD           17    // TXD(SD) OUT : GPIO17
 #define SIO_RXD           16    // RXD(RD) IN  : GPIO16
 #define SIO_RTS           4     // RTS(RS) OUT : GPIO4

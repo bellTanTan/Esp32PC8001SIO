@@ -8,6 +8,7 @@
  */
 
 // 更新履歴
+// 2022/12/10 v1.0.3 cmd sntp or mat sntp で月が正しく定義出来ない不具合改修(確認不足)
 // 2022/10/10 v1.0.2 PC-8001mkIIにてRS-232C受信割込テーブル位置(8000H,8001H)を書換え
 //                   られるタイプのバイナリ受信処理対応(確認不足)
 //                   (cmt Planet Taizer:8000H~E7FFHが顕著)
@@ -27,4 +28,4 @@
 
 #define ESP32_PC8001SIO_VERSION_MAJOR     1
 #define ESP32_PC8001SIO_VERSION_MINOR     0
-#define ESP32_PC8001SIO_VERSION_REVISION  2
+#define ESP32_PC8001SIO_VERSION_REVISION  3
